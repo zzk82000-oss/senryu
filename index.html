@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>川柳ストック</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#29415C">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#E7E4D9;color:#2B2621;font-family:'Hiragino Sans','Yu Gothic',sans-serif;text-align:center;padding:24px;box-sizing:border-box;}
+  h1{font-family:'Hiragino Mincho ProN','Yu Mincho',serif;font-size:30px;margin:0 0 8px;letter-spacing:.04em;}
+  p{margin:6px 0;color:#6E665C;font-size:14px;}
+  .ok{display:inline-block;margin-top:18px;padding:8px 18px;border-radius:20px;background:#29415C;color:#F5F3EC;font-size:14px;}
+</style>
+</head>
+<body>
+  <div>
+    <h1>川柳ストック</h1>
+    <p>ここは準備用の空のページです。</p>
+    <span class="ok" id="status">準備OK</span>
+  </div>
+<script>
+  if ('serviceWorker' in navigator) { navigator.serviceWorker.register('sw.js'); }
+  if (window.matchMedia('(display-mode: standalone)').matches) {
+    document.getElementById('status').textContent = 'アプリとして開いています';
+  }
+</script>
+</body>
+</html>
