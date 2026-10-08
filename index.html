@@ -71,7 +71,7 @@
   .sechead{font-family:'Shippori Mincho',serif;font-size:15px;font-weight:700;margin:22px 2px 0;}
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px;margin-top:12px;}
   .card{position:relative;background:var(--paper);border:.5px solid var(--paper-edge);border-left:4px solid var(--line);border-radius:10px;padding:16px 16px 14px;cursor:pointer;}
-  .poem{font-family:'Shippori Mincho','Hiragino Mincho ProN','Yu Mincho',serif;font-size:19px;line-height:1.55;margin:0 0 10px;white-space:pre-wrap;word-break:break-word;padding-right:30px;}
+  .poem{font-family:'Shippori Mincho','Hiragino Mincho ProN','Yu Mincho',serif;font-size:calc(19px * var(--poem-scale,1));line-height:1.55;margin:0 0 10px;white-space:pre-wrap;word-break:break-word;padding-right:30px;}
   .taglist{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px;}
   .taglabel{display:inline-flex;font-size:11px;padding:3px 9px;border-radius:12px;}
   .note{font-size:12px;color:var(--ink-soft);font-style:italic;margin:0 0 10px;}
@@ -102,6 +102,10 @@
   .wordrank{font-size:11px;color:var(--ink-soft);}
   .wordtext{font-family:'Shippori Mincho',serif;}
   .wordcount{font-size:11px;color:var(--hanko);}
+  .setgroup{margin-top:24px;}
+  .setgroup h3{font-family:'Shippori Mincho',serif;font-size:15px;margin:0 0 4px;font-weight:700;}
+  .setnote{font-size:12px;color:var(--ink-soft);margin:0 0 10px;}
+  .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:middle;border:.5px solid rgba(0,0,0,.2);}
   .login{min-height:80vh;display:flex;align-items:center;justify-content:center;text-align:center;}
   .login p{color:var(--ink-soft);font-size:14px;margin:8px 0 18px;}
   .foot{margin-top:48px;font-size:12px;color:var(--ink-soft);display:flex;gap:18px;flex-wrap:wrap;align-items:center;}
@@ -133,6 +137,7 @@
         <span class="pill active" data-view="write">書く</span>
         <span class="pill" data-view="stock">ストック</span>
         <span class="pill" data-view="stats">傾向</span>
+        <span class="pill" data-view="settings">設定</span>
       </div>
       <div class="pillrow" id="statusFilters"></div>
       <div class="pillrow" id="tagFilters"></div>
@@ -208,6 +213,7 @@
   <p class="count" id="countLabel"></p>
   <div id="gridArea"><div class="loading">読み込み中…</div></div>
   <div id="statsArea" style="display:none;"></div>
+  <div id="settingsArea" style="display:none;"></div>
   <div class="foot">
     <a id="exportLink">バックアップを保存</a>
     <a id="importLink">バックアップを読み込む</a>
@@ -372,7 +378,7 @@ function updateViewVisibility(){
   const w = viewMode==='write', st = viewMode==='stock', sx = viewMode==='stats';
   show('quickAdd',w); show('quickMsg',w);
   show('statusFilters',st); show('tagFilters',st); show('searchInput',st); show('openComposerBtn',st); show('countLabel',st);
-  show('gridArea',w||st); show('statsArea',sx);
+  show('gridArea',w||st); show('statsArea',sx); show('settingsArea',viewMode==='settings');
   document.querySelectorAll('#viewToggle .pill').forEach(p=>p.classList.toggle('active', p.dataset.view===viewMode));
 }
 function renderFilters(){
@@ -417,6 +423,7 @@ function gridOf(list){
 }
 function render(){
   updateViewVisibility();
+  if(viewMode==='settings'){ renderSettings(); return; }
   if(fatal) return;
   if(!loaded) return;
   if(viewMode==='stats'){ renderStats(); return; }
@@ -555,6 +562,66 @@ function renderStats(){
   h+='</div></div><div class="stat-section"><h3>期間</h3><p class="stat-note">最初の句：'+fmtDate(dates[0])+' ／ 最新の句：'+fmtDate(dates[dates.length-1])+'</p></div>';
   area.innerHTML=h;
 }
+
+/* ---------- 設定(この端末だけに保存) ---------- */
+const PALETTES = {
+  ai:   {label:'藍(標準)', dot:'#29415C'},
+  sumi: {label:'墨', dot:'#3B3B3B',
+    light:{'--bg':'#E6E5E2','--paper':'#FAFAF8','--paper-edge':'#D5D4D0','--line':'#D5D4D0','--track':'#ECEBE8','--indigo':'#3B3B3B','--indigo-ink':'#1F1F1F','--hanko':'#9A3B34'},
+    dark:{'--bg':'#161616','--paper':'#212121','--paper-edge':'#353535','--line':'#353535','--track':'#2C2C2C','--indigo':'#6A6A6A','--indigo-ink':'#9A9A9A','--hanko':'#C25A50'}},
+  moegi:{label:'若草', dot:'#3E5E43',
+    light:{'--bg':'#E3E7DA','--paper':'#F9FAF4','--paper-edge':'#D2D8C4','--line':'#D2D8C4','--track':'#E9EDDF','--indigo':'#3E5E43','--indigo-ink':'#2B4530','--hanko':'#A63B2E'},
+    dark:{'--bg':'#171B16','--paper':'#222721','--paper-edge':'#343B32','--line':'#343B32','--track':'#2D342B','--indigo':'#5C8562','--indigo-ink':'#7FA886','--hanko':'#C85A4C'}},
+  sakura:{label:'桜', dot:'#7A4A5A',
+    light:{'--bg':'#EBE3E3','--paper':'#FCF9F9','--paper-edge':'#DDD0D1','--line':'#DDD0D1','--track':'#F0E7E8','--indigo':'#7A4A5A','--indigo-ink':'#5C3342','--hanko':'#B5485A'},
+    dark:{'--bg':'#1C1819','--paper':'#272122','--paper-edge':'#3C3234','--line':'#3C3234','--track':'#312A2C','--indigo':'#A8707F','--indigo-ink':'#C48FA0','--hanko':'#D46A7C'}}
+};
+const POEM_SIZES = [['標準',1],['大',1.15],['特大',1.3]];
+const SETTINGS_KEY = 'senryu-settings';
+let settings = {theme:'auto', palette:'ai', poem:1};
+try{ Object.assign(settings, JSON.parse(localStorage.getItem(SETTINGS_KEY)||'{}')); }catch(e){}
+function saveSettings(){ try{ localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); }catch(e){} }
+const mq = window.matchMedia('(prefers-color-scheme: dark)');
+function applySettings(){
+  const root = document.documentElement;
+  if(settings.theme==='auto') root.removeAttribute('data-theme'); else root.setAttribute('data-theme', settings.theme);
+  const dark = settings.theme==='dark' || (settings.theme==='auto' && mq.matches);
+  Object.values(PALETTES).forEach(p=>{ ['light','dark'].forEach(m=>{ if(p[m]) Object.keys(p[m]).forEach(k=>root.style.removeProperty(k)); }); });
+  const pal = PALETTES[settings.palette];
+  if(pal && pal.light){ const vars = dark ? pal.dark : pal.light; Object.keys(vars).forEach(k=>root.style.setProperty(k, vars[k])); }
+  root.style.setProperty('--poem-scale', String(settings.poem||1));
+}
+mq.addEventListener && mq.addEventListener('change', ()=>{ if(settings.theme==='auto') applySettings(); });
+function setSetting(key, value){ settings[key]=value; saveSettings(); applySettings(); renderSettings(); }
+function pillGroup(options, current, onPick){
+  const row = document.createElement('div'); row.className = 'pillrow';
+  options.forEach(([value,label,dot])=>{
+    const p = document.createElement('span'); p.className = 'pill'+(current===value?' active':'');
+    if(dot){ const d=document.createElement('span'); d.className='dot'; d.style.background=dot; p.appendChild(d); }
+    p.appendChild(document.createTextNode(label));
+    p.onclick = ()=>onPick(value); row.appendChild(p);
+  });
+  return row;
+}
+function renderSettings(){
+  const area = document.getElementById('settingsArea');
+  area.innerHTML = '';
+  const note = document.createElement('p'); note.className='stat-note'; note.style.marginTop='18px';
+  note.textContent = 'この設定は、いま使っている端末だけに保存されます(PCとスマホで別々に選べます)。';
+  area.appendChild(note);
+  const groups = [
+    ['表示モード', '「自動」は端末のダークモード設定に合わせます', pillGroup([['auto','自動'],['light','ライト'],['dark','ダーク']], settings.theme, v=>setSetting('theme',v))],
+    ['配色', '', pillGroup(Object.keys(PALETTES).map(k=>[k,PALETTES[k].label,PALETTES[k].dot]), settings.palette, v=>setSetting('palette',v))],
+    ['句の文字サイズ', '', pillGroup(POEM_SIZES.map(([l,v])=>[v,l]), settings.poem, v=>setSetting('poem',v))]
+  ];
+  groups.forEach(([title,desc,row])=>{
+    const g = document.createElement('div'); g.className='setgroup';
+    const h = document.createElement('h3'); h.textContent = title; g.appendChild(h);
+    if(desc){ const d=document.createElement('p'); d.className='setnote'; d.textContent=desc; g.appendChild(d); }
+    g.appendChild(row); area.appendChild(g);
+  });
+}
+applySettings();
 
 /* ---------- イベント ---------- */
 document.querySelectorAll('#viewToggle .pill').forEach(p=>{ p.onclick=()=>{ viewMode=p.dataset.view; render(); }; });
