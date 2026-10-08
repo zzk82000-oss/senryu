@@ -1,5 +1,5 @@
-// 最小のサービスワーカー: ネットがあれば常に最新を取得し、無いときだけ保存済みを使う
-const CACHE = 'senryu-shell-v1';
+// 最小のサービスワーカー: 自分のサイトのファイルだけを対象に、ネットがあれば最新を取得し、無いときだけ保存済みを使う
+const CACHE = 'senryu-shell-v2';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)));
@@ -10,7 +10,8 @@ self.addEventListener('activate', e => {
   self.clients.claim();
 });
 self.addEventListener('fetch', e => {
-  if (e.request.method !== 'GET') return;
+  const url = new URL(e.request.url);
+  if (e.request.method !== 'GET' || url.origin !== self.location.origin) return;
   e.respondWith(
     fetch(e.request).then(res => {
       const copy = res.clone();

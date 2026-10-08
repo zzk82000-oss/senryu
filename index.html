@@ -8,24 +8,595 @@
 <meta name="theme-color" content="#29415C">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;700&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
-  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#E7E4D9;color:#2B2621;font-family:'Hiragino Sans','Yu Gothic',sans-serif;text-align:center;padding:24px;box-sizing:border-box;}
-  h1{font-family:'Hiragino Mincho ProN','Yu Mincho',serif;font-size:30px;margin:0 0 8px;letter-spacing:.04em;}
-  p{margin:6px 0;color:#6E665C;font-size:14px;}
-  .ok{display:inline-block;margin-top:18px;padding:8px 18px;border-radius:20px;background:#29415C;color:#F5F3EC;font-size:14px;}
+  :root{
+    --bg:#E7E4D9; --paper:#FBFAF5; --paper-edge:#DCD8C9; --ink:#2B2621; --ink-soft:#6E665C;
+    --indigo:#29415C; --indigo-ink:#1D3247; --hanko:#A63B2E; --line:#D8D3C5;
+    --field:#FFFFFF; --track:#EFEBDF; --btn-text:#F5F3EC;
+    box-sizing:border-box;
+    padding-top:env(safe-area-inset-top,0px);
+    padding-bottom:env(safe-area-inset-bottom,0px);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#1B1A17; --paper:#262420; --paper-edge:#3A3731; --ink:#ECE8DE; --ink-soft:#A8A093;
+      --indigo:#4F7499; --indigo-ink:#6C93B8; --hanko:#C85A4C; --line:#3A3731;
+      --field:#1F1D1A; --track:#33302A; --btn-text:#FFFFFF;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#1B1A17; --paper:#262420; --paper-edge:#3A3731; --ink:#ECE8DE; --ink-soft:#A8A093;
+    --indigo:#4F7499; --indigo-ink:#6C93B8; --hanko:#C85A4C; --line:#3A3731;
+    --field:#1F1D1A; --track:#33302A; --btn-text:#FFFFFF;
+  }
+  html{scroll-padding-top:env(safe-area-inset-top,0px);}
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:'Zen Kaku Gothic New','Hiragino Sans','Yu Gothic',sans-serif;min-height:100vh;padding:28px 20px 80px;}
+  .wrap{max-width:980px;margin:0 auto;}
+  h1{font-family:'Shippori Mincho','Hiragino Mincho ProN','Yu Mincho',serif;font-weight:700;font-size:28px;margin:0 0 4px;letter-spacing:.04em;}
+  .sub{color:var(--ink-soft);font-size:13px;margin:0;}
+  .toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:18px;}
+  .pillrow{display:flex;gap:6px;flex-wrap:wrap;}
+  .pill{border:.5px solid var(--paper-edge);background:var(--paper);color:var(--ink-soft);font-size:13px;padding:6px 14px;border-radius:20px;cursor:pointer;user-select:none;}
+  .pill.active{background:var(--indigo);border-color:var(--indigo);color:var(--btn-text);}
+  .spacer{flex:1;}
+  .addbtn{border:none;background:var(--hanko);color:#fff;font-size:14px;font-weight:500;padding:9px 18px;border-radius:20px;cursor:pointer;font-family:inherit;}
+  .searchbox{border:.5px solid var(--paper-edge);background:var(--paper);border-radius:20px;padding:6px 14px;font-size:13px;color:var(--ink);font-family:inherit;min-width:150px;}
+  .searchbox:focus,textarea:focus,select:focus,.composer input:focus{outline:2px solid var(--indigo);outline-offset:1px;}
+  textarea,.composer input[type=date],.composer input[type=text],.composer select{width:100%;border:.5px solid var(--paper-edge);border-radius:6px;background:var(--field);padding:10px 12px;font-size:15px;color:var(--ink);font-family:inherit;}
+  textarea{font-family:'Shippori Mincho','Hiragino Mincho ProN','Yu Mincho',serif;font-size:18px;resize:vertical;min-height:48px;}
+  .quickadd{display:flex;gap:10px;align-items:flex-start;margin-top:16px;}
+  .quickadd textarea{flex:1;font-size:16px;}
+  .quickmsg{font-size:12px;color:var(--ink-soft);margin:6px 2px 0;min-height:16px;}
+  .btn{border:.5px solid var(--paper-edge);background:var(--field);padding:9px 18px;border-radius:20px;font-size:14px;cursor:pointer;color:var(--ink);font-family:inherit;}
+  .btn.primary{background:var(--indigo);border-color:var(--indigo);color:var(--btn-text);}
+  .btn.danger{color:var(--hanko);border-color:var(--hanko);background:none;}
+  .btn:disabled{opacity:.5;cursor:default;}
+  .composer{background:var(--paper);border:.5px solid var(--paper-edge);border-radius:10px;padding:0 22px;margin-top:0;max-height:0;overflow:hidden;opacity:0;transition:max-height .28s ease,opacity .2s ease,padding .28s ease,margin .28s ease;}
+  .composer.open{max-height:760px;opacity:1;padding:20px 22px;margin-top:16px;}
+  .field{margin-bottom:14px;}
+  .field label{display:block;font-size:12px;color:var(--ink-soft);margin-bottom:6px;}
+  .row2{display:flex;gap:14px;flex-wrap:wrap;}
+  .row2>div{flex:1;min-width:140px;}
+  .taginput-wrap{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+  .taginput-wrap input{flex:1;min-width:120px;}
+  .tagsuggest{font-size:12px;padding:5px 12px;border-radius:14px;border:.5px solid var(--paper-edge);cursor:pointer;background:var(--field);}
+  .composer-actions{display:flex;justify-content:space-between;align-items:center;margin-top:18px;gap:10px;flex-wrap:wrap;}
+  .composer-actions .left{display:flex;gap:10px;}
+  .err{color:var(--hanko);font-size:12px;margin-top:6px;display:none;}
+  .count{font-size:12px;color:var(--ink-soft);margin:14px 2px 0;}
+  .sechead{font-family:'Shippori Mincho',serif;font-size:15px;font-weight:700;margin:22px 2px 0;}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px;margin-top:12px;}
+  .card{position:relative;background:var(--paper);border:.5px solid var(--paper-edge);border-left:4px solid var(--line);border-radius:10px;padding:16px 16px 14px;cursor:pointer;}
+  .poem{font-family:'Shippori Mincho','Hiragino Mincho ProN','Yu Mincho',serif;font-size:19px;line-height:1.55;margin:0 0 10px;white-space:pre-wrap;word-break:break-word;padding-right:30px;}
+  .taglist{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px;}
+  .taglabel{display:inline-flex;font-size:11px;padding:3px 9px;border-radius:12px;}
+  .note{font-size:12px;color:var(--ink-soft);font-style:italic;margin:0 0 10px;}
+  .meta{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--ink-soft);gap:8px;}
+  .promote{border:.5px solid var(--indigo);background:none;color:var(--indigo-ink);border-radius:14px;font-size:12px;padding:3px 10px;cursor:pointer;font-family:inherit;}
+  .stamp{position:absolute;top:12px;right:14px;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Shippori Mincho',serif;font-size:12px;font-weight:700;}
+  .stamp.posted{border:1.5px solid var(--hanko);color:var(--hanko);}
+  .stamp.draft{border:1.5px dashed var(--ink-soft);color:var(--ink-soft);}
+  .stamp.wip{border:1.5px dashed var(--indigo-ink);color:var(--indigo-ink);}
+  .empty{text-align:center;padding:50px 20px;color:var(--ink-soft);}
+  .empty p{margin:4px 0;}
+  .loading{text-align:center;padding:60px;color:var(--ink-soft);font-size:13px;}
+  .stat-cards{display:flex;gap:12px;flex-wrap:wrap;margin-top:18px;}
+  .statcard{background:var(--paper);border:.5px solid var(--paper-edge);border-radius:10px;padding:16px 22px;min-width:100px;text-align:center;}
+  .statvalue{font-family:'Shippori Mincho',serif;font-size:24px;font-weight:700;}
+  .statlabel{font-size:12px;color:var(--ink-soft);margin-top:4px;}
+  .stat-section{margin-top:30px;}
+  .stat-section h3{font-family:'Shippori Mincho',serif;font-size:16px;margin:0 0 4px;font-weight:700;}
+  .stat-note{font-size:12px;color:var(--ink-soft);margin:0 0 12px;}
+  .barlist{display:flex;flex-direction:column;gap:8px;margin-top:10px;}
+  .barrow{display:flex;align-items:center;gap:10px;font-size:13px;}
+  .barlabel{width:96px;flex-shrink:0;color:var(--ink-soft);}
+  .bartrack{flex:1;background:var(--track);border-radius:6px;overflow:hidden;height:14px;}
+  .barfill{height:100%;border-radius:6px;}
+  .barcount{width:84px;flex-shrink:0;text-align:right;color:var(--ink-soft);font-size:12px;}
+  .wordgrid{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;}
+  .wordchip{display:flex;align-items:center;gap:7px;background:var(--paper);border:.5px solid var(--paper-edge);border-radius:16px;padding:6px 13px;font-size:13px;}
+  .wordrank{font-size:11px;color:var(--ink-soft);}
+  .wordtext{font-family:'Shippori Mincho',serif;}
+  .wordcount{font-size:11px;color:var(--hanko);}
+  .login{min-height:80vh;display:flex;align-items:center;justify-content:center;text-align:center;}
+  .login p{color:var(--ink-soft);font-size:14px;margin:8px 0 18px;}
+  .foot{margin-top:48px;font-size:12px;color:var(--ink-soft);display:flex;gap:18px;flex-wrap:wrap;align-items:center;}
+  .foot a{cursor:pointer;text-decoration:underline;}
+  @media (max-width:560px){
+    body{padding:20px 14px 80px;}
+    h1{font-size:24px;}
+    .grid{grid-template-columns:1fr;}
+    .searchbox{flex:1;}
+    .barlabel{width:78px;}
+  }
 </style>
 </head>
 <body>
+<div class="login" id="login">
   <div>
     <h1>川柳ストック</h1>
-    <p>ここは準備用の空のページです。</p>
-    <span class="ok" id="status">準備OK</span>
+    <p id="loginMsg">確認中…</p>
+    <button class="addbtn" id="loginBtn" style="display:none;">Googleでログイン</button>
+    <div class="err" id="loginErr"></div>
   </div>
-<script>
-  if ('serviceWorker' in navigator) { navigator.serviceWorker.register('sw.js'); }
-  if (window.matchMedia('(display-mode: standalone)').matches) {
-    document.getElementById('status').textContent = 'アプリとして開いています';
+</div>
+<div class="wrap" id="app" style="display:none;">
+  <header>
+    <h1>川柳ストック</h1>
+    <p class="sub">作った句をためておく場所</p>
+    <div class="toolbar">
+      <div class="pillrow" id="viewToggle">
+        <span class="pill active" data-view="write">書く</span>
+        <span class="pill" data-view="stock">ストック</span>
+        <span class="pill" data-view="stats">傾向</span>
+      </div>
+      <div class="pillrow" id="statusFilters"></div>
+      <div class="pillrow" id="tagFilters"></div>
+      <input type="text" id="searchInput" class="searchbox" placeholder="句・備考を検索">
+      <div class="spacer"></div>
+      <button class="addbtn" id="openComposerBtn">＋ 詳しく入力</button>
+    </div>
+  </header>
+
+  <div class="quickadd" id="quickAdd">
+    <textarea id="quickInput" rows="1" placeholder="句を打つ／貼り付け → Enterで「推敲中」に追加(複数行は1行1句)"></textarea>
+    <button class="btn primary" id="quickBtn">追加</button>
+  </div>
+  <div class="quickmsg" id="quickMsg"></div>
+
+  <div class="composer" id="composer">
+    <div class="field">
+      <label for="poemInput">句</label>
+      <textarea id="poemInput" placeholder="五七五を書きとめる"></textarea>
+      <div class="err" id="poemErr">句を入力してください</div>
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label>状態</label>
+        <div class="pillrow" id="statusToggle">
+          <span class="pill" data-status="wip">推敲中</span>
+          <span class="pill" data-status="draft">投稿前</span>
+          <span class="pill" data-status="posted">投稿済み</span>
+        </div>
+      </div>
+      <div class="field">
+        <label for="dateInput">作成日</label>
+        <input type="date" id="dateInput">
+      </div>
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label for="genreInput">ジャンル</label>
+        <select id="genreInput">
+          <option value="川柳">川柳</option>
+          <option value="七七・十四字">七七・十四字</option>
+          <option value="自由律俳句">自由律俳句</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="noteInput">備考(任意)</label>
+        <input type="text" id="noteInput" placeholder="メモがあれば">
+      </div>
+    </div>
+    <div class="field">
+      <label for="tagInput">区分(複数可・読点やカンマで区切る)</label>
+      <div class="taginput-wrap">
+        <input type="text" id="tagInput" placeholder="冷、笑 のように">
+        <span class="tagsuggest" data-tag="笑">笑</span>
+        <span class="tagsuggest" data-tag="冷">冷</span>
+        <span class="tagsuggest" data-tag="温">温</span>
+        <span class="tagsuggest" data-tag="劇薬">劇薬</span>
+        <span class="tagsuggest" data-tag="ミント">ミント</span>
+        <span class="tagsuggest" data-tag="音">音</span>
+        <span class="tagsuggest" data-tag="ギミック">ギミック</span>
+        <span class="tagsuggest" data-tag="エロス">エロス</span>
+      </div>
+    </div>
+    <div class="composer-actions">
+      <div class="left">
+        <button class="btn primary" id="saveBtn">書き留める</button>
+        <button class="btn" id="cancelBtn">やめる</button>
+      </div>
+      <button class="btn danger" id="deleteBtn" style="display:none;">この句を消す</button>
+    </div>
+  </div>
+
+  <p class="count" id="countLabel"></p>
+  <div id="gridArea"><div class="loading">読み込み中…</div></div>
+  <div id="statsArea" style="display:none;"></div>
+  <div class="foot">
+    <a id="exportLink">バックアップを保存</a>
+    <a id="importLink">バックアップを読み込む</a>
+    <a id="logoutLink">ログアウト</a>
+    <span id="whoami"></span>
+  </div>
+  <input type="file" id="importFile" accept=".json,application/json" style="display:none;">
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+import { initializeFirestore, getFirestore, persistentLocalCache, persistentMultipleTabManager, collection, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDca_wGk7K61_XGBCGUW6vpcPytzR6kCrM",
+  authDomain: "senryu-7ae0b.firebaseapp.com",
+  projectId: "senryu-7ae0b",
+  storageBucket: "senryu-7ae0b.firebasestorage.app",
+  messagingSenderId: "86058317529",
+  appId: "1:86058317529:web:a9344e30bf04bb6abd30c8"
+};
+const app_ = initializeApp(firebaseConfig);
+const auth = getAuth(app_);
+let db;
+try{
+  db = initializeFirestore(app_, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) });
+}catch(e){
+  db = getFirestore(app_);
+}
+
+const STATUS_LABEL = {wip:'推敲中', draft:'投稿前', posted:'投稿済み'};
+const STATUS_STAMP = {wip:'推', draft:'未', posted:'済'};
+const CHUNK_MAX = 60;
+
+let col = null, userId = null, unsub = null, ready = false, loaded = false, fatal = false;
+let chunks = {};
+let entries = [];
+let viewMode = 'write', quickQueued = false, filterStatus = 'all', filterTag = null, searchQuery = '';
+let editingId = null, composerStatus = 'wip';
+
+const TAG_COLORS = {
+  '笑':{bg:'#F3E3D6',fg:'#B5642F'}, '冷':{bg:'#DEE9EF',fg:'#3E6C8A'}, '温':{bg:'#F2E7CE',fg:'#8F6F1F'},
+  '劇薬':{bg:'#F1DCE0',fg:'#A03B4E'}, 'ミント':{bg:'#DCEFE6',fg:'#2F8A6A'}, '音':{bg:'#E3E3ED',fg:'#5A5A94'},
+  'ギミック':{bg:'#F0EAD2',fg:'#7A6A20'}, 'エロス':{bg:'#F3DFEA',fg:'#A44A82'}
+};
+const FALLBACK = [{bg:'#E7E2D8',fg:'#6A604D'},{bg:'#DCE6E0',fg:'#3F6E5A'},{bg:'#EAE0EC',fg:'#6E4F86'}];
+function tagColor(t){
+  if(TAG_COLORS[t]) return TAG_COLORS[t];
+  let h=0; for(let i=0;i<t.length;i++) h=(h*31+t.charCodeAt(i))>>>0;
+  return FALLBACK[h%FALLBACK.length];
+}
+function parseTags(s){ return s ? s.split(/[、,]/).map(x=>x.trim()).filter(Boolean) : []; }
+function uid(){ return 'm'+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+function todayLocal(){
+  const d=new Date();
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function fmtDate(d){
+  if(!d) return '';
+  const p=d.split('-'); if(!p[0]) return '';
+  return p[0]+'年'+parseInt(p[1],10)+'月'+parseInt(p[2],10)+'日';
+}
+function escapeHtml(s){ return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+/* ---------- storage (Firestore: users/{uid}/chunks/{cid}) ---------- */
+function rebuild(){
+  entries = [];
+  Object.keys(chunks).sort().forEach(k=>{ chunks[k].forEach(e=>entries.push(e)); });
+}
+function findChunk(id){
+  for(const k of Object.keys(chunks)){ if(chunks[k].some(e=>e.id===id)) return k; }
+  return null;
+}
+function targetChunk(){
+  const keys = Object.keys(chunks).sort();
+  const last = keys[keys.length-1];
+  if(!last) return 'c001';
+  if(chunks[last].length < CHUNK_MAX) return last;
+  return 'c'+String(parseInt(last.slice(1),10)+1).padStart(3,'0');
+}
+function persist(cids){
+  [...new Set(cids)].forEach(cid=>{
+    const items = chunks[cid] || [];
+    setDoc(doc(col, cid), {items}).catch(err=>{ console.error(err); flash('保存に失敗しました。通信状況を確認してください'); });
+  });
+}
+function flash(t){ document.getElementById('quickMsg').textContent = t; }
+
+function startSync(user){
+  userId = user.uid;
+  col = collection(db, 'users', userId, 'chunks');
+  document.getElementById('whoami').textContent = user.email || '';
+  unsub = onSnapshot(col, snap=>{
+    const next = {};
+    snap.docs.forEach(d=>{
+      const items = (d.data() && d.data().items) || [];
+      next[d.id] = items.map(x=>Object.assign({},x));
+    });
+    chunks = next;
+    rebuild();
+    loaded = true;
+    if(!snap.metadata.fromCache || snap.size>0) ready = true;
+    render();
+    if(ready && quickQueued){ quickQueued = false; quickAdd(); }
+  }, err=>{ console.error(err); setFatal(); });
+}
+function stopSync(){
+  if(unsub){ unsub(); unsub = null; }
+  col = null; userId = null; chunks = {}; entries = []; ready = false; loaded = false; fatal = false;
+  document.getElementById('gridArea').innerHTML = '<div class="loading">読み込み中…</div>';
+}
+function setFatal(){
+  fatal = true;
+  document.getElementById('gridArea').innerHTML = '<div class="empty"><p>データを読み込めませんでした。</p><p>通信状況を確認して、開き直してください。</p></div>';
+}
+
+/* ---------- バックアップ ---------- */
+function exportBackup(){
+  const blob = new Blob([JSON.stringify({version:1, entries}, null, 1)], {type:'application/json'});
+  const a = document.createElement('a');
+  const d = new Date();
+  const stamp = d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'senryu-backup-'+stamp+'.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 2000);
+}
+async function importBackup(file){
+  if(!ready){ alert('読み込み中です。少し待ってからもう一度お試しください'); return; }
+  try{
+    const obj = JSON.parse(await file.text());
+    const arr = Array.isArray(obj) ? obj : (obj.entries || []);
+    const existing = new Set(entries.map(e=>e.id));
+    const touched = []; let added = 0;
+    arr.forEach(e=>{
+      if(!e || !e.poem || !e.id || existing.has(e.id)) return;
+      existing.add(e.id);
+      const cid = targetChunk();
+      if(!chunks[cid]) chunks[cid] = [];
+      chunks[cid].push({id:e.id, poem:e.poem, status:e.status||'draft', date:e.date||'', genre:e.genre||'川柳', tags:e.tags||[], note:e.note||'', ts:e.ts||0});
+      touched.push(cid); added++;
+    });
+    rebuild(); render(); if(touched.length) persist(touched);
+    alert(added+'句を読み込みました');
+  }catch(err){ alert('ファイルを読み込めませんでした'); }
+}
+
+/* ---------- 表示 ---------- */
+function allTags(){
+  const set = new Set();
+  entries.forEach(e=>(e.tags||[]).forEach(t=>set.add(t)));
+  const order = ['笑','冷','温','劇薬','ミント','音','ギミック','エロス'];
+  return Array.from(set).sort((a,b)=>{
+    const ia=order.indexOf(a), ib=order.indexOf(b);
+    if(ia===-1&&ib===-1) return a.localeCompare(b,'ja');
+    if(ia===-1) return 1; if(ib===-1) return -1; return ia-ib;
+  });
+}
+function updateViewVisibility(){
+  const show = (id,on)=>{ document.getElementById(id).style.display = on ? '' : 'none'; };
+  const w = viewMode==='write', st = viewMode==='stock', sx = viewMode==='stats';
+  show('quickAdd',w); show('quickMsg',w);
+  show('statusFilters',st); show('tagFilters',st); show('searchInput',st); show('openComposerBtn',st); show('countLabel',st);
+  show('gridArea',w||st); show('statsArea',sx);
+  document.querySelectorAll('#viewToggle .pill').forEach(p=>p.classList.toggle('active', p.dataset.view===viewMode));
+}
+function renderFilters(){
+  const se = document.getElementById('statusFilters'); se.innerHTML='';
+  [['all','全て'],['draft','投稿前'],['posted','投稿済み']].forEach(([k,l])=>{
+    const p=document.createElement('span'); p.className='pill'+(filterStatus===k?' active':''); p.textContent=l;
+    p.onclick=()=>{filterStatus=k;render();}; se.appendChild(p);
+  });
+  const te = document.getElementById('tagFilters'); te.innerHTML='';
+  allTags().forEach(tag=>{
+    const p=document.createElement('span'); const on=filterTag===tag; p.className='pill'; p.textContent=tag;
+    if(on){ const c=tagColor(tag); p.style.background=c.fg; p.style.borderColor=c.fg; p.style.color='#fff'; }
+    p.onclick=()=>{filterTag=on?null:tag;render();}; te.appendChild(p);
+  });
+}
+function cardEl(e){
+  const card=document.createElement('div'); card.className='card';
+  const tags=e.tags||[];
+  card.style.borderLeftColor = tags.length ? tagColor(tags[0]).fg : 'var(--line)';
+  card.onclick=()=>openComposer(e.id);
+  const st=document.createElement('div'); st.className='stamp '+e.status; st.textContent=STATUS_STAMP[e.status]||'未'; card.appendChild(st);
+  const poem=document.createElement('p'); poem.className='poem'; poem.textContent=e.poem; card.appendChild(poem);
+  if(tags.length){
+    const tl=document.createElement('div'); tl.className='taglist';
+    tags.forEach(t=>{ const c=tagColor(t); const s=document.createElement('span'); s.className='taglabel'; s.style.background=c.bg; s.style.color=c.fg; s.textContent=t; tl.appendChild(s); });
+    card.appendChild(tl);
   }
+  if(e.note){ const n=document.createElement('p'); n.className='note'; n.textContent=e.note; card.appendChild(n); }
+  const meta=document.createElement('div'); meta.className='meta';
+  const left=document.createElement('span');
+  if(e.status==='wip'){
+    const b=document.createElement('button'); b.className='promote'; b.textContent='完成 → ストックへ';
+    b.onclick=(ev)=>{ ev.stopPropagation(); changeStatus(e.id,'draft'); };
+    left.appendChild(b);
+  } else if(e.genre && e.genre!=='川柳'){ left.textContent=e.genre; }
+  const right=document.createElement('span'); right.textContent=fmtDate(e.date);
+  meta.appendChild(left); meta.appendChild(right); card.appendChild(meta);
+  return card;
+}
+function gridOf(list){
+  const g=document.createElement('div'); g.className='grid'; list.forEach(e=>g.appendChild(cardEl(e))); return g;
+}
+function render(){
+  updateViewVisibility();
+  if(fatal) return;
+  if(!loaded) return;
+  if(viewMode==='stats'){ renderStats(); return; }
+  const area=document.getElementById('gridArea');
+  const byNew=(a,b)=>(b.date||'').localeCompare(a.date||'') || (b.ts||0)-(a.ts||0);
+  area.innerHTML='';
+  if(viewMode==='write'){
+    const wip=entries.filter(e=>e.status==='wip').sort(byNew);
+    if(!wip.length){ area.innerHTML = entries.length ? '<div class="empty"><p>推敲中の句はありません。</p><p>上の欄に書いてみましょう。</p></div>' : '<div class="empty"><p>まだデータがありません。</p><p>画面の一番下の「バックアップを読み込む」から、senryu-data.json を選んでください。</p></div>'; return; }
+    const h=document.createElement('div'); h.className='sechead'; h.textContent='推敲中 ('+wip.length+')'; area.appendChild(h);
+    area.appendChild(gridOf(wip));
+    return;
+  }
+  renderFilters();
+  let list=entries.filter(e=>{
+    if(e.status==='wip') return false;
+    if(filterStatus!=='all' && e.status!==filterStatus) return false;
+    if(filterTag && !(e.tags||[]).includes(filterTag)) return false;
+    if(searchQuery){ const h=(e.poem+' '+(e.note||'')).toLowerCase(); if(!h.includes(searchQuery.toLowerCase())) return false; }
+    return true;
+  }).sort(byNew);
+  document.getElementById('countLabel').textContent=list.length+'句';
+  if(!list.length){ area.innerHTML='<div class="empty"><p>該当する句がありません。</p></div>'; return; }
+  area.appendChild(gridOf(list));
+}
+
+/* ---------- 追加・編集 ---------- */
+function changeStatus(id,status){
+  const cid=findChunk(id); if(!cid||!ready) return;
+  const e=chunks[cid].find(x=>x.id===id); e.status=status;
+  rebuild(); render(); persist([cid]);
+}
+function setComposerStatus(s){
+  composerStatus=s;
+  document.querySelectorAll('#statusToggle .pill').forEach(p=>p.classList.toggle('active',p.dataset.status===s));
+}
+function openComposer(id){
+  if(!ready) return;
+  editingId=id||null;
+  const gi=document.getElementById('genreInput');
+  Array.from(gi.options).forEach(o=>{ if(!['川柳','七七・十四字','自由律俳句'].includes(o.value)) gi.remove(o.index); });
+  document.getElementById('poemErr').style.display='none';
+  if(editingId){
+    const e=entries.find(x=>x.id===editingId);
+    document.getElementById('poemInput').value=e.poem;
+    document.getElementById('dateInput').value=e.date||'';
+    const g=e.genre||'川柳';
+    if(!Array.from(gi.options).some(o=>o.value===g)){ const o=document.createElement('option'); o.value=g; o.textContent=g; gi.appendChild(o); }
+    gi.value=g;
+    document.getElementById('tagInput').value=(e.tags||[]).join('、');
+    document.getElementById('noteInput').value=e.note||'';
+    setComposerStatus(e.status);
+    document.getElementById('deleteBtn').style.display='inline-block';
+  } else {
+    document.getElementById('poemInput').value='';
+    document.getElementById('dateInput').value=todayLocal();
+    gi.value='川柳';
+    document.getElementById('tagInput').value='';
+    document.getElementById('noteInput').value='';
+    setComposerStatus('wip');
+    document.getElementById('deleteBtn').style.display='none';
+  }
+  document.getElementById('composer').classList.add('open');
+  document.getElementById('composer').scrollIntoView({block:'nearest',behavior:'smooth'});
+  document.getElementById('poemInput').focus();
+}
+function closeComposer(){ document.getElementById('composer').classList.remove('open'); editingId=null; }
+function saveEntry(){
+  if(!ready) return;
+  const poem=document.getElementById('poemInput').value.trim();
+  if(!poem){ document.getElementById('poemErr').style.display='block'; return; }
+  const date=document.getElementById('dateInput').value||todayLocal();
+  const genre=document.getElementById('genreInput').value||'川柳';
+  const tags=parseTags(document.getElementById('tagInput').value);
+  const note=document.getElementById('noteInput').value.trim();
+  let cid;
+  if(editingId){
+    cid=findChunk(editingId);
+    const e=chunks[cid].find(x=>x.id===editingId);
+    Object.assign(e,{poem,status:composerStatus,date,genre,tags,note});
+  } else {
+    cid=targetChunk();
+    if(!chunks[cid]) chunks[cid]=[];
+    chunks[cid].push({id:uid(),poem,status:composerStatus,date,genre,tags,note,ts:Date.now()});
+  }
+  rebuild(); closeComposer(); render(); persist([cid]);
+}
+function deleteEntry(){
+  if(!editingId||!ready) return;
+  const cid=findChunk(editingId); if(!cid) return;
+  chunks[cid]=chunks[cid].filter(x=>x.id!==editingId);
+  rebuild(); closeComposer(); render(); persist([cid]);
+}
+function quickAdd(){
+  const input=document.getElementById('quickInput');
+  if(!ready){ if(input.value.trim()){ quickQueued=true; flash('読み込み中です。終わり次第、自動で追加します'); } return; }
+  const lines=input.value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+  if(!lines.length) return;
+  const existing=new Set(entries.map(e=>e.poem));
+  const touched=[]; let added=0, skipped=0; const date=todayLocal(); const ts=Date.now();
+  lines.forEach((poem,i)=>{
+    if(existing.has(poem)){ skipped++; return; }
+    existing.add(poem);
+    const cid=targetChunk();
+    if(!chunks[cid]) chunks[cid]=[];
+    chunks[cid].push({id:uid(),poem,status:'wip',date,genre:'川柳',tags:[],note:'',ts:ts+i});
+    touched.push(cid); added++;
+  });
+  input.value='';
+  flash(added+'句を「推敲中」に追加しました'+(skipped?'(登録済みの'+skipped+'句はスキップ)':''));
+  rebuild(); render(); if(touched.length) persist(touched);
+  input.focus();
+}
+
+/* ---------- 傾向 ---------- */
+function statCard(v,l){ return '<div class="statcard"><div class="statvalue">'+v+'</div><div class="statlabel">'+l+'</div></div>'; }
+function renderStats(){
+  const area=document.getElementById('statsArea'); const total=entries.length;
+  if(!total){ area.innerHTML='<div class="empty"><p>まだ句がありません。</p></div>'; return; }
+  const cnt=s=>entries.filter(e=>e.status===s).length;
+  const dates=entries.map(e=>e.date).filter(Boolean).sort();
+  const avg=Math.round(entries.reduce((s,e)=>s+e.poem.length,0)/total*10)/10;
+  const mc={}; entries.forEach(e=>{ if(e.date){ const k=e.date.slice(0,7); mc[k]=(mc[k]||0)+1; } });
+  const months=Object.keys(mc).sort(); const maxM=Math.max(1,...months.map(m=>mc[m]));
+  const tc={}; entries.forEach(e=>(e.tags||[]).forEach(t=>tc[t]=(tc[t]||0)+1));
+  const tl=Object.entries(tc).sort((a,b)=>b[1]-a[1]); const maxT=Math.max(1,...tl.map(x=>x[1]));
+  const wc={}; entries.forEach(e=>{ const ws=(e.poem.match(/[ァ-ヶー]{2,}/g)||[]).concat(e.poem.match(/[A-Za-z][A-Za-z0-9]{1,}/g)||[]); ws.forEach(w=>wc[w]=(wc[w]||0)+1); });
+  const wl=Object.entries(wc).filter(x=>x[1]>=2).sort((a,b)=>b[1]-a[1]).slice(0,12);
+  let h='<div class="stat-cards">'+statCard(total+'句','総数')+statCard(cnt('wip')+'句','推敲中')+statCard(cnt('draft')+'句','投稿前')+statCard(cnt('posted')+'句','投稿済み')+statCard(avg+'字','平均文字数')+'</div>';
+  h+='<div class="stat-section"><h3>月別の作句数</h3><div class="barlist">';
+  months.forEach(m=>{ const c=mc[m], p=m.split('-'); h+='<div class="barrow"><span class="barlabel">'+p[0]+'年'+parseInt(p[1],10)+'月</span><div class="bartrack"><div class="barfill" style="width:'+Math.round(c/maxM*100)+'%;background:var(--indigo)"></div></div><span class="barcount">'+c+'句</span></div>'; });
+  h+='</div></div><div class="stat-section"><h3>区分の内訳</h3><div class="barlist">';
+  tl.forEach(([t,c])=>{ const col=tagColor(t); h+='<div class="barrow"><span class="barlabel">'+escapeHtml(t)+'</span><div class="bartrack"><div class="barfill" style="width:'+Math.round(c/maxT*100)+'%;background:'+col.fg+'"></div></div><span class="barcount">'+c+'句('+Math.round(c/total*100)+'%)</span></div>'; });
+  h+='</div></div><div class="stat-section"><h3>よく出てくるカタカナ語・外来語 TOP'+wl.length+'</h3><p class="stat-note">句の中のカタカナの連続とアルファベットのまとまりを数えたもので、厳密な形態素解析ではありません</p><div class="wordgrid">';
+  wl.forEach(([w,c],i)=>{ h+='<div class="wordchip"><span class="wordrank">'+(i+1)+'</span><span class="wordtext">'+escapeHtml(w)+'</span><span class="wordcount">'+c+'</span></div>'; });
+  h+='</div></div><div class="stat-section"><h3>期間</h3><p class="stat-note">最初の句：'+fmtDate(dates[0])+' ／ 最新の句：'+fmtDate(dates[dates.length-1])+'</p></div>';
+  area.innerHTML=h;
+}
+
+/* ---------- イベント ---------- */
+document.querySelectorAll('#viewToggle .pill').forEach(p=>{ p.onclick=()=>{ viewMode=p.dataset.view; render(); }; });
+document.getElementById('searchInput').oninput=e=>{ searchQuery=e.target.value.trim(); render(); };
+document.getElementById('openComposerBtn').onclick=()=>openComposer(null);
+document.getElementById('cancelBtn').onclick=closeComposer;
+document.getElementById('saveBtn').onclick=saveEntry;
+document.getElementById('deleteBtn').onclick=deleteEntry;
+document.getElementById('quickBtn').onclick=quickAdd;
+document.getElementById('quickInput').addEventListener('keydown',e=>{
+  if(e.key==='Enter' && !e.shiftKey && !e.isComposing){ e.preventDefault(); quickAdd(); }
+});
+document.querySelectorAll('#statusToggle .pill').forEach(p=>{ p.onclick=()=>setComposerStatus(p.dataset.status); });
+document.querySelectorAll('.tagsuggest').forEach(s=>{
+  s.onclick=()=>{ const i=document.getElementById('tagInput'); const cur=parseTags(i.value); if(!cur.includes(s.dataset.tag)) cur.push(s.dataset.tag); i.value=cur.join('、'); };
+});
+
+document.getElementById('exportLink').onclick = exportBackup;
+document.getElementById('importLink').onclick = ()=> document.getElementById('importFile').click();
+document.getElementById('importFile').onchange = e=>{ const f=e.target.files[0]; if(f) importBackup(f); e.target.value=''; };
+document.getElementById('logoutLink').onclick = ()=> signOut(auth);
+document.getElementById('loginBtn').onclick = ()=>{
+  document.getElementById('loginErr').style.display='none';
+  signInWithPopup(auth, new GoogleAuthProvider()).catch(err=>{
+    const el = document.getElementById('loginErr');
+    el.textContent = 'ログインできませんでした（'+(err.code||'error')+'）';
+    el.style.display = 'block';
+  });
+};
+onAuthStateChanged(auth, user=>{
+  const login = document.getElementById('login'), app = document.getElementById('app');
+  if(user){
+    login.style.display = 'none'; app.style.display = '';
+    stopSync(); startSync(user);
+    document.getElementById('quickInput').focus();
+  } else {
+    stopSync();
+    app.style.display = 'none'; login.style.display = '';
+    document.getElementById('loginMsg').textContent = 'ログインして使います';
+    document.getElementById('loginBtn').style.display = '';
+  }
+});
 </script>
 </body>
 </html>
