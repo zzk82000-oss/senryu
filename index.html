@@ -48,6 +48,12 @@
   .searchbox:focus,textarea:focus,select:focus,.composer input:focus{outline:2px solid var(--indigo);outline-offset:1px;}
   textarea,.composer input[type=date],.composer input[type=text],.composer select{width:100%;border:.5px solid var(--paper-edge);border-radius:6px;background:var(--field);padding:10px 12px;font-size:15px;color:var(--ink);font-family:inherit;}
   textarea{font-family:'Shippori Mincho','Hiragino Mincho ProN','Yu Mincho',serif;font-size:18px;resize:vertical;min-height:48px;}
+  .daily{margin-top:16px;}
+  .dailybtn{display:inline-block;max-width:100%;text-align:left;background:var(--paper);border:.5px solid var(--paper-edge);border-radius:10px;padding:8px 16px;cursor:pointer;color:var(--ink);font-family:inherit;}
+  .dailylabel{display:block;font-size:11px;color:var(--ink-soft);}
+  .dailyterm{display:block;font-family:'Shippori Mincho','Hiragino Mincho ProN','Yu Mincho',serif;font-size:20px;font-weight:700;line-height:1.45;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .dailycount{display:block;font-size:11px;color:var(--ink-soft);}
+  .nounbar{display:flex;gap:6px;flex-wrap:wrap;margin-top:14px;}
   .quickadd{display:flex;gap:10px;align-items:flex-start;margin-top:16px;}
   .quickadd textarea{flex:1;font-size:16px;}
   .quickbtns{display:flex;flex-direction:column;gap:6px;}
@@ -149,6 +155,9 @@
     </div>
   </header>
 
+  <div class="nounbar" id="nounBar" style="display:none;"><span class="pill active" id="nounBarLabel"></span><span class="pill" id="nounBarClear">解除</span></div>
+  <div class="daily" id="dailyWord" style="display:none;"><button type="button" class="dailybtn" id="dailyBtn"><span class="dailylabel">今日の名詞</span><span class="dailyterm" id="dailyTerm"></span><span class="dailycount" id="dailyCount"></span></button></div>
+
   <div class="quickadd" id="quickAdd">
     <textarea id="quickInput" rows="1" placeholder="句を打つ／貼り付け → Enterで「推敲中」に追加(複数行は1行1句)"></textarea>
     <div class="quickbtns"><button class="btn primary" id="quickBtn">推敲中に追加</button><button class="btn" id="quickStockBtn">ストックに登録</button></div>
@@ -228,7 +237,7 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
-import { initializeFirestore, getFirestore, persistentLocalCache, persistentMultipleTabManager, collection, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+import { initializeFirestore, getFirestore, persistentLocalCache, persistentMultipleTabManager, collection, doc, setDoc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDca_wGk7K61_XGBCGUW6vpcPytzR6kCrM",
@@ -256,6 +265,7 @@ let chunks = {};
 let entries = [];
 let viewMode = 'write', quickQueued = false, filterStatus = 'all', filterTag = null, searchQuery = '';
 let editingId = null, composerStatus = 'wip', composerFromQuick = false;
+let filterNoun = null;
 
 const TAG_COLORS = {
   '笑':{bg:'#F3E3D6',fg:'#B5642F'}, '冷':{bg:'#DEE9EF',fg:'#3E6C8A'}, '温':{bg:'#F2E7CE',fg:'#8F6F1F'},
@@ -285,6 +295,7 @@ function escapeHtml(s){ return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;',
 function rebuild(){
   entries = [];
   Object.keys(chunks).sort().forEach(k=>{ chunks[k].forEach(e=>entries.push(e)); });
+  if(loaded) scheduleNouns();
 }
 function findChunk(id){
   for(const k of Object.keys(chunks)){ if(chunks[k].some(e=>e.id===id)) return k; }
@@ -309,6 +320,7 @@ function startSync(user){
   userId = user.uid;
   col = collection(db, 'users', userId, 'chunks');
   document.getElementById('whoami').textContent = user.email || '';
+  loadNounCache();
   unsub = onSnapshot(col, snap=>{
     const next = {};
     snap.docs.forEach(d=>{
@@ -320,12 +332,14 @@ function startSync(user){
     loaded = true;
     if(!snap.metadata.fromCache || snap.size>0) ready = true;
     render();
+    scheduleNouns();
     if(ready && quickQueued){ quickQueued = false; quickAdd(); }
   }, err=>{ console.error(err); setFatal(); });
 }
 function stopSync(){
   if(unsub){ unsub(); unsub = null; }
   col = null; userId = null; chunks = {}; entries = []; ready = false; loaded = false; fatal = false;
+  resetNouns();
   document.getElementById('gridArea').innerHTML = '<div class="loading">読み込み中…</div>';
 }
 function setFatal(){
@@ -380,10 +394,12 @@ function updateViewVisibility(){
   const w = viewMode==='write', st = viewMode==='stock', sx = viewMode==='stats';
   show('quickAdd',w); show('quickMsg',w);
   show('statusFilters',st); show('tagFilters',st); show('searchInput',st); show('openComposerBtn',st); show('countLabel',st);
-  show('gridArea',w||st); show('statsArea',sx); show('settingsArea',viewMode==='settings');
+  show('gridArea',w||st); show('statsArea',sx);
+  show('dailyWord',w && dailyReady()); show('nounBar',st && !!filterNoun); show('settingsArea',viewMode==='settings');
   document.querySelectorAll('#viewToggle .pill').forEach(p=>p.classList.toggle('active', p.dataset.view===viewMode));
 }
 function renderFilters(){
+  document.getElementById('nounBarLabel').textContent = filterNoun ? '名詞「'+filterNoun+'」を含む句' : '';
   const se = document.getElementById('statusFilters'); se.innerHTML='';
   [['all','全て'],['draft','投稿前'],['posted','投稿済み']].forEach(([k,l])=>{
     const p=document.createElement('span'); p.className='pill'+(filterStatus===k?' active':''); p.textContent=l;
@@ -441,7 +457,8 @@ function render(){
   }
   renderFilters();
   let list=entries.filter(e=>{
-    if(e.status==='wip') return false;
+    if(e.status==='wip' && !filterNoun) return false;
+    if(filterNoun){ const r=nounIndex && nounIndex.get(filterNoun); if(!r || !r.ids.has(e.id)) return false; }
     if(filterStatus!=='all' && e.status!==filterStatus) return false;
     if(filterTag && !(e.tags||[]).includes(filterTag)) return false;
     if(searchQuery){ const h=(e.poem+' '+(e.note||'')).toLowerCase(); if(!h.includes(searchQuery.toLowerCase())) return false; }
@@ -543,6 +560,148 @@ function quickAdd(){
   input.focus();
 }
 
+/* ---------- 今日の名詞 ---------- */
+// 句の中の名詞を形態素解析(kuromoji.js)で取り出し、毎日1語を等確率で選ぶ。
+// 名詞のデータはFirestoreに保存しない。解析結果は、句の文字列そのものではなくそのハッシュ(短い符号)をキーにして端末に覚える。
+// 選んだ1語だけ users/{uid}/meta/daily に保存し、別の端末でも同じ語になるようにする。
+const NOUN_CACHE_VER = 1;
+const NOUN_POS_OK = ['一般','固有名詞','サ変接続','副詞可能'];
+let tokenizer = null, tokenizerState = 'idle';
+let nounCache = {}, nounIndex = null, nounBusy = false, nounDirty = false, nounTimer = null;
+let daily = {date:null, word:null}, dailyBusy = false;
+
+function jstToday(){ return new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Tokyo'}).format(new Date()); }
+function hashStr(s){
+  let h1=0xdeadbeef, h2=0x41c6ce57;
+  for(let i=0;i<s.length;i++){ const ch=s.charCodeAt(i); h1=Math.imul(h1^ch,2654435761); h2=Math.imul(h2^ch,1597334677); }
+  h1=Math.imul(h1^(h1>>>16),2246822507)^Math.imul(h2^(h2>>>13),3266489909);
+  h2=Math.imul(h2^(h2>>>16),2246822507)^Math.imul(h1^(h1>>>13),3266489909);
+  return (4294967296*(2097151&h2)+(h1>>>0)).toString(36);
+}
+function nounKey(){ return 'senryu-nouns-'+userId; }
+function loadNounCache(){
+  nounCache = {};
+  try{ const o = JSON.parse(localStorage.getItem(nounKey())||'null'); if(o && o.v===NOUN_CACHE_VER && o.m) nounCache = o.m; }catch(e){}
+}
+function saveNounCache(){
+  try{
+    const keep = {}; entries.forEach(e=>{ const k=hashStr(e.poem); if(nounCache[k]) keep[k]=nounCache[k]; });
+    nounCache = keep;
+    localStorage.setItem(nounKey(), JSON.stringify({v:NOUN_CACHE_VER, m:keep}));
+  }catch(e){}
+}
+function resetNouns(){
+  clearTimeout(nounTimer); nounCache = {}; nounIndex = null; daily = {date:null, word:null}; filterNoun = null;
+}
+function dailyReady(){ return !!(daily.word && nounIndex && nounIndex.has(daily.word)); }
+function extractNouns(poem){
+  const out = [];
+  tokenizer.tokenize(poem.normalize('NFKC')).forEach(t=>{
+    if(t.pos!=='名詞' || !NOUN_POS_OK.includes(t.pos_detail_1)) return;
+    let w = (t.basic_form && t.basic_form!=='*') ? t.basic_form : t.surface_form;
+    w = w.toLowerCase();
+    if(/^[ぁ-んァ-ヶー]$/.test(w) || !/[一-龥々〆ぁ-んァ-ヶA-Za-z0-9]/.test(w)) return;
+    out.push(w);
+  });
+  return out;
+}
+function loadTokenizer(){
+  if(tokenizerState!=='idle') return;
+  tokenizerState = 'loading';
+  // 辞書の展開は少し重いので、画面が表示されてから裏で始める
+  setTimeout(()=>{
+    const s = document.createElement('script'); s.src = 'lib/kuromoji.js';
+    s.onerror = ()=>{ tokenizerState = 'failed'; };
+    s.onload = ()=>{
+      try{
+        window.kuromoji.builder({dicPath:'dict/'}).build((err,t)=>{
+          if(err || !t){ tokenizerState = 'failed'; console.error(err); return; }
+          tokenizer = t; tokenizerState = 'ready'; scheduleNouns();
+        });
+      }catch(e){ tokenizerState = 'failed'; console.error(e); }
+    };
+    document.head.appendChild(s);
+  }, 1500);
+}
+function scheduleNouns(){
+  if(!userId || !loaded) return;
+  clearTimeout(nounTimer); nounTimer = setTimeout(runNouns, 400);
+}
+async function runNouns(){
+  if(nounBusy){ nounDirty = true; return; }
+  const uidAtStart = userId; if(!uidAtStart || !loaded || !ready) return;
+  nounBusy = true;
+  try{
+    const missing = entries.filter(e=>!nounCache[hashStr(e.poem)]);
+    if(missing.length){
+      if(!tokenizer){ loadTokenizer(); return; }
+      for(let i=0;i<missing.length;i++){
+        if(userId!==uidAtStart) return;
+        nounCache[hashStr(missing[i].poem)] = extractNouns(missing[i].poem);
+        if(i%40===39) await new Promise(r=>setTimeout(r,0));
+      }
+    }
+    if(userId!==uidAtStart) return;
+    saveNounCache();
+    buildNounIndex();
+    await ensureDaily();
+    if(userId===uidAtStart){ renderDaily(); if(filterNoun) render(); }
+  }catch(err){ console.error(err); }
+  finally{ nounBusy = false; if(nounDirty){ nounDirty = false; scheduleNouns(); } }
+}
+function buildNounIndex(){
+  const m = new Map();
+  entries.forEach(e=>{
+    (nounCache[hashStr(e.poem)]||[]).forEach(w=>{
+      let r = m.get(w); if(!r){ r = {count:0, ids:new Set()}; m.set(w,r); }
+      r.count++; r.ids.add(e.id);
+    });
+  });
+  nounIndex = m;
+}
+async function ensureDaily(){
+  if(!ready || !nounIndex || dailyBusy) return;
+  const today = jstToday();
+  if(daily.date===today && dailyReady()) return;
+  if(!nounIndex.size){ daily = {date:null, word:null}; return; }
+  dailyBusy = true;
+  const uidAtStart = userId;
+  try{
+    let word = null;
+    const ref = doc(db,'users',uidAtStart,'meta','daily');
+    try{
+      const snap = await getDoc(ref); const d = snap.exists() ? snap.data() : null;
+      if(d && d.date===today && typeof d.word==='string') word = d.word;
+    }catch(e){
+      try{ const l = JSON.parse(localStorage.getItem('senryu-daily-'+uidAtStart)||'null'); if(l && l.date===today) word = l.word; }catch(_){}
+    }
+    if(userId!==uidAtStart) return;
+    if(!word || !nounIndex.has(word)){
+      const keys = Array.from(nounIndex.keys());
+      word = keys[Math.floor(Math.random()*keys.length)];
+      setDoc(ref,{date:today, word}).catch(err=>console.error(err));
+    }
+    daily = {date:today, word};
+    try{ localStorage.setItem('senryu-daily-'+uidAtStart, JSON.stringify(daily)); }catch(e){}
+  }finally{ dailyBusy = false; }
+}
+function renderDaily(){
+  if(dailyReady()){
+    document.getElementById('dailyTerm').textContent = daily.word;
+    document.getElementById('dailyTerm').title = daily.word;
+    document.getElementById('dailyCount').textContent = '登場回数：'+nounIndex.get(daily.word).count+'回';
+  }
+  updateViewVisibility();
+}
+function showNounSentences(word){
+  filterNoun = word; filterStatus = 'all'; filterTag = null; searchQuery = '';
+  document.getElementById('searchInput').value = '';
+  viewMode = 'stock'; render(); window.scrollTo(0,0);
+}
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState==='visible' && userId && nounIndex && daily.date!==jstToday()) ensureDaily().then(renderDaily);
+});
+
 /* ---------- 傾向 ---------- */
 function statCard(v,l){ return '<div class="statcard"><div class="statvalue">'+v+'</div><div class="statlabel">'+l+'</div></div>'; }
 function renderStats(){
@@ -629,7 +788,9 @@ function renderSettings(){
 applySettings();
 
 /* ---------- イベント ---------- */
-document.querySelectorAll('#viewToggle .pill').forEach(p=>{ p.onclick=()=>{ viewMode=p.dataset.view; render(); }; });
+document.querySelectorAll('#viewToggle .pill').forEach(p=>{ p.onclick=()=>{ filterNoun=null; viewMode=p.dataset.view; render(); }; });
+document.getElementById('dailyBtn').onclick=()=>{ if(daily.word) showNounSentences(daily.word); };
+document.getElementById('nounBarClear').onclick=()=>{ filterNoun=null; render(); };
 document.getElementById('searchInput').oninput=e=>{ searchQuery=e.target.value.trim(); render(); };
 document.getElementById('openComposerBtn').onclick=()=>openComposer(null,{status:'draft'});
 document.getElementById('quickStockBtn').onclick=()=>{

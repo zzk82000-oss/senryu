@@ -1,0 +1,5 @@
+kuromoji.js 0.1.2 (https://github.com/takuyaa/kuromoji.js)
+Copyright Takuya Asano. Licensed under the Apache License, Version 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
+
+dict/ : kuromoji.js に同梱されている日本語辞書(IPADIC由来)。
+配布元(https://github.com/takuyaa/kuromoji.js)のライセンス表記に従う。
