@@ -40,6 +40,7 @@
   .sub{color:var(--ink-soft);font-size:13px;margin:0;}
   .toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:18px;}
   .pillrow{display:flex;gap:6px;flex-wrap:wrap;}
+  #viewToggle,#statusFilters{flex-basis:100%;}
   .pill{border:.5px solid var(--paper-edge);background:var(--paper);color:var(--ink-soft);font-size:13px;padding:6px 14px;border-radius:20px;cursor:pointer;user-select:none;}
   .pill.active{background:var(--indigo);border-color:var(--indigo);color:var(--btn-text);}
   .spacer{flex:1;}
@@ -535,6 +536,7 @@ function saveEntry(){
 }
 function deleteEntry(){
   if(!editingId||!ready) return;
+  if(!confirm('本当に消しますか?\nこの句は元に戻せません。')) return;
   const cid=findChunk(editingId); if(!cid) return;
   chunks[cid]=chunks[cid].filter(x=>x.id!==editingId);
   rebuild(); closeComposer(); render(); persist([cid]);
