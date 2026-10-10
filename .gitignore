@@ -1,0 +1,7 @@
+# 句のデータ(公開リポジトリに入れない)
+senryu-data.json
+senryu-backup-*.json
+
+# OSやエディタのごみ
+.DS_Store
+Thumbs.db
