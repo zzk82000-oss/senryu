@@ -50,6 +50,8 @@
   textarea{font-family:'Shippori Mincho','Hiragino Mincho ProN','Yu Mincho',serif;font-size:18px;resize:vertical;min-height:48px;}
   .quickadd{display:flex;gap:10px;align-items:flex-start;margin-top:16px;}
   .quickadd textarea{flex:1;font-size:16px;}
+  .quickbtns{display:flex;flex-direction:column;gap:6px;}
+  .quickbtns .btn{padding:8px 14px;font-size:13px;white-space:nowrap;}
   .quickmsg{font-size:12px;color:var(--ink-soft);margin:6px 2px 0;min-height:16px;}
   .btn{border:.5px solid var(--paper-edge);background:var(--field);padding:9px 18px;border-radius:20px;font-size:14px;cursor:pointer;color:var(--ink);font-family:inherit;}
   .btn.primary{background:var(--indigo);border-color:var(--indigo);color:var(--btn-text);}
@@ -149,7 +151,7 @@
 
   <div class="quickadd" id="quickAdd">
     <textarea id="quickInput" rows="1" placeholder="句を打つ／貼り付け → Enterで「推敲中」に追加(複数行は1行1句)"></textarea>
-    <button class="btn primary" id="quickBtn">追加</button>
+    <div class="quickbtns"><button class="btn primary" id="quickBtn">推敲中に追加</button><button class="btn" id="quickStockBtn">ストックに登録</button></div>
   </div>
   <div class="quickmsg" id="quickMsg"></div>
 
@@ -253,7 +255,7 @@ let col = null, userId = null, unsub = null, ready = false, loaded = false, fata
 let chunks = {};
 let entries = [];
 let viewMode = 'write', quickQueued = false, filterStatus = 'all', filterTag = null, searchQuery = '';
-let editingId = null, composerStatus = 'wip';
+let editingId = null, composerStatus = 'wip', composerFromQuick = false;
 
 const TAG_COLORS = {
   '笑':{bg:'#F3E3D6',fg:'#B5642F'}, '冷':{bg:'#DEE9EF',fg:'#3E6C8A'}, '温':{bg:'#F2E7CE',fg:'#8F6F1F'},
@@ -460,7 +462,7 @@ function setComposerStatus(s){
   composerStatus=s;
   document.querySelectorAll('#statusToggle .pill').forEach(p=>p.classList.toggle('active',p.dataset.status===s));
 }
-function openComposer(id){
+function openComposer(id, prefill){
   if(!ready) return;
   editingId=id||null;
   const gi=document.getElementById('genreInput');
@@ -478,19 +480,19 @@ function openComposer(id){
     setComposerStatus(e.status);
     document.getElementById('deleteBtn').style.display='inline-block';
   } else {
-    document.getElementById('poemInput').value='';
+    document.getElementById('poemInput').value=(prefill && prefill.poem) || '';
     document.getElementById('dateInput').value=todayLocal();
     gi.value='川柳';
     document.getElementById('tagInput').value='';
     document.getElementById('noteInput').value='';
-    setComposerStatus('wip');
+    setComposerStatus((prefill && prefill.status) || 'wip');
     document.getElementById('deleteBtn').style.display='none';
   }
   document.getElementById('composer').classList.add('open');
   document.getElementById('composer').scrollIntoView({block:'nearest',behavior:'smooth'});
   document.getElementById('poemInput').focus();
 }
-function closeComposer(){ document.getElementById('composer').classList.remove('open'); editingId=null; }
+function closeComposer(){ document.getElementById('composer').classList.remove('open'); editingId=null; composerFromQuick=false; }
 function saveEntry(){
   if(!ready) return;
   const poem=document.getElementById('poemInput').value.trim();
@@ -509,7 +511,10 @@ function saveEntry(){
     if(!chunks[cid]) chunks[cid]=[];
     chunks[cid].push({id:uid(),poem,status:composerStatus,date,genre,tags,note,ts:Date.now()});
   }
+  const fromQuick = composerFromQuick, wasNew = !editingId, savedStatus = composerStatus;
   rebuild(); closeComposer(); render(); persist([cid]);
+  if(fromQuick) document.getElementById('quickInput').value='';
+  if(wasNew && viewMode==='write') flash('「'+STATUS_LABEL[savedStatus]+'」として登録しました'+(savedStatus==='wip'?'':'(ストックタブで見られます)'));
 }
 function deleteEntry(){
   if(!editingId||!ready) return;
@@ -626,7 +631,13 @@ applySettings();
 /* ---------- イベント ---------- */
 document.querySelectorAll('#viewToggle .pill').forEach(p=>{ p.onclick=()=>{ viewMode=p.dataset.view; render(); }; });
 document.getElementById('searchInput').oninput=e=>{ searchQuery=e.target.value.trim(); render(); };
-document.getElementById('openComposerBtn').onclick=()=>openComposer(null);
+document.getElementById('openComposerBtn').onclick=()=>openComposer(null,{status:'draft'});
+document.getElementById('quickStockBtn').onclick=()=>{
+  if(!ready){ flash('読み込み中です。少し待ってからお試しください'); return; }
+  const v=document.getElementById('quickInput').value.trim();
+  composerFromQuick=true;
+  openComposer(null,{poem:v,status:'draft'});
+};
 document.getElementById('cancelBtn').onclick=closeComposer;
 document.getElementById('saveBtn').onclick=saveEntry;
 document.getElementById('deleteBtn').onclick=deleteEntry;
