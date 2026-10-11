@@ -393,7 +393,7 @@ function allTags(){
 function updateViewVisibility(){
   const show = (id,on)=>{ document.getElementById(id).style.display = on ? '' : 'none'; };
   const w = viewMode==='write', st = viewMode==='stock', sx = viewMode==='stats';
-  show('quickAdd',w); show('quickMsg',w);
+  show('quickAdd',w); show('quickMsg',w||st);
   show('statusFilters',st); show('tagFilters',st); show('searchInput',st); show('openComposerBtn',st); show('countLabel',st);
   show('gridArea',w||st); show('statsArea',sx);
   show('dailyWord',w && dailyReady()); show('nounBar',st && !!filterNoun); show('settingsArea',viewMode==='settings');
@@ -514,25 +514,40 @@ function closeComposer(){ document.getElementById('composer').classList.remove('
 function saveEntry(){
   if(!ready) return;
   const poem=document.getElementById('poemInput').value.trim();
-  if(!poem){ document.getElementById('poemErr').style.display='block'; return; }
+  if(!poem){ const pe=document.getElementById('poemErr'); pe.textContent='句を入力してください'; pe.style.display='block'; return; }
   const date=document.getElementById('dateInput').value||todayLocal();
   const genre=document.getElementById('genreInput').value||'川柳';
   const tags=parseTags(document.getElementById('tagInput').value);
   const note=document.getElementById('noteInput').value.trim();
-  let cid;
   if(editingId){
-    cid=findChunk(editingId);
+    const cid=findChunk(editingId);
     const e=chunks[cid].find(x=>x.id===editingId);
     Object.assign(e,{poem,status:composerStatus,date,genre,tags,note});
-  } else {
-    cid=targetChunk();
-    if(!chunks[cid]) chunks[cid]=[];
-    chunks[cid].push({id:uid(),poem,status:composerStatus,date,genre,tags,note,ts:Date.now()});
+    rebuild(); closeComposer(); render(); persist([cid]);
+    return;
   }
-  const fromQuick = composerFromQuick, wasNew = !editingId, savedStatus = composerStatus;
-  rebuild(); closeComposer(); render(); persist([cid]);
+  // 新規登録: 改行ごとに1句として登録する(空行は無視・登録済みと同じ文面はスキップ)
+  const lines=document.getElementById('poemInput').value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+  const existing=new Set(entries.map(e=>e.poem));
+  const touched=[]; let added=0, skipped=0; const ts=Date.now();
+  lines.forEach((line,i)=>{
+    if(existing.has(line)){ skipped++; return; }
+    existing.add(line);
+    const cid=targetChunk();
+    if(!chunks[cid]) chunks[cid]=[];
+    chunks[cid].push({id:uid(),poem:line,status:composerStatus,date,genre,tags:tags.slice(),note,ts:ts+i});
+    touched.push(cid); added++;
+  });
+  if(!added){
+    const err=document.getElementById('poemErr');
+    err.textContent = lines.length>1 ? 'すべて登録済みの句です' : '登録済みの句です';
+    err.style.display='block';
+    return;
+  }
+  const fromQuick = composerFromQuick, savedStatus = composerStatus;
+  rebuild(); closeComposer(); render(); persist(touched);
   if(fromQuick) document.getElementById('quickInput').value='';
-  if(wasNew && viewMode==='write') flash('「'+STATUS_LABEL[savedStatus]+'」として登録しました'+(savedStatus==='wip'?'':'(ストックタブで見られます)'));
+  flash(added+'句を「'+STATUS_LABEL[savedStatus]+'」として登録しました'+(skipped?'(登録済みの'+skipped+'句はスキップ)':'')+(savedStatus==='wip'||viewMode!=='write'?'':'(ストックタブで見られます)'));
 }
 function deleteEntry(){
   if(!editingId||!ready) return;
@@ -790,7 +805,7 @@ function renderSettings(){
 applySettings();
 
 /* ---------- イベント ---------- */
-document.querySelectorAll('#viewToggle .pill').forEach(p=>{ p.onclick=()=>{ filterNoun=null; viewMode=p.dataset.view; render(); }; });
+document.querySelectorAll('#viewToggle .pill').forEach(p=>{ p.onclick=()=>{ filterNoun=null; flash(''); viewMode=p.dataset.view; render(); }; });
 document.getElementById('dailyBtn').onclick=()=>{ if(daily.word) showNounSentences(daily.word); };
 document.getElementById('nounBarClear').onclick=()=>{ filterNoun=null; render(); };
 document.getElementById('searchInput').oninput=e=>{ searchQuery=e.target.value.trim(); render(); };
