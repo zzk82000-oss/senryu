@@ -65,7 +65,7 @@
   .btn.danger{color:var(--hanko);border-color:var(--hanko);background:none;}
   .btn:disabled{opacity:.5;cursor:default;}
   .composer{background:var(--paper);border:.5px solid var(--paper-edge);border-radius:10px;padding:0 22px;margin-top:0;max-height:0;overflow:hidden;opacity:0;transition:max-height .28s ease,opacity .2s ease,padding .28s ease,margin .28s ease;}
-  .composer.open{max-height:760px;opacity:1;padding:20px 22px;margin-top:16px;}
+  .composer.open{max-height:1100px;opacity:1;padding:20px 22px;margin-top:16px;}
   .field{margin-bottom:14px;}
   .field label{display:block;font-size:12px;color:var(--ink-soft);margin-bottom:6px;}
   .row2{display:flex;gap:14px;flex-wrap:wrap;}
@@ -90,6 +90,8 @@
   .stamp.posted{border:1.5px solid var(--hanko);color:var(--hanko);}
   .stamp.draft{border:1.5px dashed var(--ink-soft);color:var(--ink-soft);}
   .stamp.wip{border:1.5px dashed var(--indigo-ink);color:var(--indigo-ink);}
+  .stamp.hanamaru{border:none;color:var(--hanko);width:32px;height:32px;top:10px;right:12px;}
+  .stamp.hanamaru svg{width:100%;height:100%;display:block;}
   .empty{text-align:center;padding:50px 20px;color:var(--ink-soft);}
   .empty p{margin:4px 0;}
   .loading{text-align:center;padding:60px;color:var(--ink-soft);font-size:13px;}
@@ -185,6 +187,16 @@
         <input type="date" id="dateInput">
       </div>
     </div>
+    <div class="field" id="selectField" style="display:none;">
+      <label>選考</label>
+      <div class="pillrow" id="selToggle">
+        <span class="pill" data-sel="yes">選あり</span>
+        <span class="pill" data-sel="no">選なし</span>
+      </div>
+      <div id="resultWrap" style="display:none;margin-top:10px;">
+        <input type="text" id="resultInput" placeholder="選考結果(入選・佳作など。落選や結果待ちは空欄のまま)">
+      </div>
+    </div>
     <div class="row2">
       <div class="field">
         <label for="genreInput">ジャンル</label>
@@ -267,6 +279,7 @@ let entries = [];
 let viewMode = 'write', quickQueued = false, filterStatus = 'all', filterTag = null, searchQuery = '';
 let editingId = null, composerStatus = 'wip', composerFromQuick = false;
 let filterNoun = null;
+let composerSel = null;
 
 const TAG_COLORS = {
   '笑':{bg:'#F3E3D6',fg:'#B5642F'}, '冷':{bg:'#DEE9EF',fg:'#3E6C8A'}, '温':{bg:'#F2E7CE',fg:'#8F6F1F'},
@@ -371,7 +384,10 @@ async function importBackup(file){
       existing.add(e.id);
       const cid = targetChunk();
       if(!chunks[cid]) chunks[cid] = [];
-      chunks[cid].push({id:e.id, poem:e.poem, status:e.status||'draft', date:e.date||'', genre:e.genre||'川柳', tags:e.tags||[], note:e.note||'', ts:e.ts||0});
+      const item = {id:e.id, poem:e.poem, status:e.status||'draft', date:e.date||'', genre:e.genre||'川柳', tags:e.tags||[], note:e.note||'', ts:e.ts||0};
+      if(e.selection==='yes' || e.selection==='no') item.selection = e.selection;
+      if(typeof e.selectionResult==='string' && e.selectionResult) item.selectionResult = e.selectionResult;
+      chunks[cid].push(item);
       touched.push(cid); added++;
     });
     rebuild(); render(); if(touched.length) persist(touched);
@@ -418,7 +434,10 @@ function cardEl(e){
   const tags=e.tags||[];
   card.style.borderLeftColor = tags.length ? tagColor(tags[0]).fg : 'var(--line)';
   card.onclick=()=>openComposer(e.id);
-  const st=document.createElement('div'); st.className='stamp '+e.status; st.textContent=STATUS_STAMP[e.status]||'未'; card.appendChild(st);
+  const st=document.createElement('div');
+  if(isWin(e)){ st.className='stamp hanamaru'; st.title='入選'; st.innerHTML=HANAMARU_SVG; }
+  else { st.className='stamp '+e.status; st.textContent=STATUS_STAMP[e.status]||'未'; }
+  card.appendChild(st);
   const poem=document.createElement('p'); poem.className='poem'; poem.textContent=e.poem; card.appendChild(poem);
   if(tags.length){
     const tl=document.createElement('div'); tl.className='taglist';
@@ -476,9 +495,34 @@ function changeStatus(id,status){
   const e=chunks[cid].find(x=>x.id===id); e.status=status;
   rebuild(); render(); persist([cid]);
 }
+/* ---------- 選考結果 ---------- */
+// 入選 = 投稿済み かつ 「選あり」 かつ 選考結果の欄に(空白以外の)文字がある。結果の名称は区別しない
+function isWin(e){ return e.status==='posted' && e.selection==='yes' && !!(e.selectionResult||'').trim(); }
+// 花丸(外側に花びら・内側にうずまき)。色は currentColor(=朱色)
+const HANAMARU_SVG = (function(){
+  const pts = [];
+  for(let k=0;k<8;k++){ const a=(k*45+22.5)*Math.PI/180; pts.push([(14+8.4*Math.sin(a)).toFixed(2),(14-8.4*Math.cos(a)).toFixed(2)]); }
+  let d = 'M'+pts[0][0]+' '+pts[0][1];
+  for(let k=1;k<=8;k++){ const q=pts[k%8]; d += ' A3.7 3.7 0 0 1 '+q[0]+' '+q[1]; }
+  return '<svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="'+d+' Z"/><path d="M14 14 a1 1 0 0 1 2 0 a2 2 0 0 1 -4 0 a3 3 0 0 1 6 0 a4 4 0 0 1 -8 0"/></svg>';
+})();
+function updateSelUI(){
+  document.getElementById('selectField').style.display = composerStatus==='posted' ? '' : 'none';
+  document.querySelectorAll('#selToggle .pill').forEach(p=>p.classList.toggle('active', p.dataset.sel===composerSel));
+  document.getElementById('resultWrap').style.display = composerSel==='yes' ? '' : 'none';
+}
+// 保存する句に、選考情報を書き込む(未設定なら項目ごと外す。undefined はFirestoreに送れないため)
+function applySel(o){
+  if(composerSel){
+    o.selection = composerSel;
+    const r = composerSel==='yes' ? document.getElementById('resultInput').value.trim() : '';
+    if(r) o.selectionResult = r; else delete o.selectionResult;
+  } else { delete o.selection; delete o.selectionResult; }
+}
 function setComposerStatus(s){
   composerStatus=s;
   document.querySelectorAll('#statusToggle .pill').forEach(p=>p.classList.toggle('active',p.dataset.status===s));
+  updateSelUI();
 }
 function openComposer(id, prefill){
   if(!ready) return;
@@ -495,6 +539,8 @@ function openComposer(id, prefill){
     gi.value=g;
     document.getElementById('tagInput').value=(e.tags||[]).join('、');
     document.getElementById('noteInput').value=e.note||'';
+    composerSel=e.selection==='yes'||e.selection==='no' ? e.selection : null;
+    document.getElementById('resultInput').value=e.selectionResult||'';
     setComposerStatus(e.status);
     document.getElementById('deleteBtn').style.display='inline-block';
   } else {
@@ -503,6 +549,8 @@ function openComposer(id, prefill){
     gi.value='川柳';
     document.getElementById('tagInput').value='';
     document.getElementById('noteInput').value='';
+    composerSel=null;
+    document.getElementById('resultInput').value='';
     setComposerStatus((prefill && prefill.status) || 'wip');
     document.getElementById('deleteBtn').style.display='none';
   }
@@ -523,6 +571,7 @@ function saveEntry(){
     const cid=findChunk(editingId);
     const e=chunks[cid].find(x=>x.id===editingId);
     Object.assign(e,{poem,status:composerStatus,date,genre,tags,note});
+    if(composerStatus==='posted') applySel(e);
     rebuild(); closeComposer(); render(); persist([cid]);
     return;
   }
@@ -535,7 +584,9 @@ function saveEntry(){
     existing.add(line);
     const cid=targetChunk();
     if(!chunks[cid]) chunks[cid]=[];
-    chunks[cid].push({id:uid(),poem:line,status:composerStatus,date,genre,tags:tags.slice(),note,ts:ts+i});
+    const item={id:uid(),poem:line,status:composerStatus,date,genre,tags:tags.slice(),note,ts:ts+i};
+    if(composerStatus==='posted') applySel(item);
+    chunks[cid].push(item);
     touched.push(cid); added++;
   });
   if(!added){
@@ -734,6 +785,9 @@ function renderStats(){
   const wc={}; entries.forEach(e=>{ const ws=(e.poem.match(/[ァ-ヶー]{2,}/g)||[]).concat(e.poem.match(/[A-Za-z][A-Za-z0-9]{1,}/g)||[]); ws.forEach(w=>wc[w]=(wc[w]||0)+1); });
   const wl=Object.entries(wc).filter(x=>x[1]>=2).sort((a,b)=>b[1]-a[1]).slice(0,12);
   let h='<div class="stat-cards">'+statCard(total+'句','総数')+statCard(cnt('wip')+'句','推敲中')+statCard(cnt('draft')+'句','投稿前')+statCard(cnt('posted')+'句','投稿済み')+statCard(avg+'字','平均文字数')+'</div>';
+  const selTargets=entries.filter(e=>e.status==='posted' && e.selection==='yes'), wins=selTargets.filter(isWin).length;
+  const winRate=selTargets.length ? Math.round(wins/selTargets.length*100) : 0;
+  h+='<div class="stat-section"><h3>入選率</h3><p class="stat-note">投稿済みで「選あり」の句のうち、選考結果が入っている句の割合です(気軽に眺める目安です)</p><div class="stat-cards" style="margin-top:0">'+statCard(winRate+'%','入選率')+statCard(wins+'句','入選した句')+statCard(selTargets.length+'句','投稿済み・選あり')+'</div></div>';
   h+='<div class="stat-section"><h3>月別の作句数</h3><div class="barlist">';
   months.forEach(m=>{ const c=mc[m], p=m.split('-'); h+='<div class="barrow"><span class="barlabel">'+p[0]+'年'+parseInt(p[1],10)+'月</span><div class="bartrack"><div class="barfill" style="width:'+Math.round(c/maxM*100)+'%;background:var(--indigo)"></div></div><span class="barcount">'+c+'句</span></div>'; });
   h+='</div></div><div class="stat-section"><h3>区分の内訳</h3><div class="barlist">';
@@ -824,6 +878,7 @@ document.getElementById('quickInput').addEventListener('keydown',e=>{
   if(e.key==='Enter' && !e.shiftKey && !e.isComposing){ e.preventDefault(); quickAdd(); }
 });
 document.querySelectorAll('#statusToggle .pill').forEach(p=>{ p.onclick=()=>setComposerStatus(p.dataset.status); });
+document.querySelectorAll('#selToggle .pill').forEach(p=>{ p.onclick=()=>{ composerSel = composerSel===p.dataset.sel ? null : p.dataset.sel; updateSelUI(); }; });
 document.querySelectorAll('.tagsuggest').forEach(s=>{
   s.onclick=()=>{ const i=document.getElementById('tagInput'); const cur=parseTags(i.value); if(!cur.includes(s.dataset.tag)) cur.push(s.dataset.tag); i.value=cur.join('、'); };
 });
