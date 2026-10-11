@@ -283,6 +283,7 @@ let entries = [];
 let viewMode = 'write', quickQueued = false, filterStatus = 'all', filterTag = null, searchQuery = '';
 let editingId = null, composerStatus = 'wip', composerFromQuick = false;
 let filterNoun = null;
+const NO_TAG = '__none__';
 let composerSel = null;
 
 const TAG_COLORS = {
@@ -432,6 +433,10 @@ function renderFilters(){
     if(on){ const c=tagColor(tag); p.style.background=c.fg; p.style.borderColor=c.fg; p.style.color='#fff'; }
     p.onclick=()=>{filterTag=on?null:tag;render();}; te.appendChild(p);
   });
+  // 区分が1つもない句の絞り込み(いちばん右)
+  const np=document.createElement('span'); const nOn=filterTag===NO_TAG; np.className='pill'; np.textContent='未分類';
+  if(nOn){ np.style.background='var(--ink-soft)'; np.style.borderColor='var(--ink-soft)'; np.style.color='#fff'; }
+  np.onclick=()=>{filterTag=nOn?null:NO_TAG;render();}; te.appendChild(np);
 }
 function cardEl(e){
   const card=document.createElement('div'); card.className='card';
@@ -484,7 +489,8 @@ function render(){
     if(e.status==='wip' && !filterNoun) return false;
     if(filterNoun){ const r=nounIndex && nounIndex.get(filterNoun); if(!r || !r.ids.has(e.id)) return false; }
     if(filterStatus!=='all' && e.status!==filterStatus) return false;
-    if(filterTag && !(e.tags||[]).includes(filterTag)) return false;
+    if(filterTag===NO_TAG){ if((e.tags||[]).length) return false; }
+    else if(filterTag && !(e.tags||[]).includes(filterTag)) return false;
     if(searchQuery){ const h=(e.poem+' '+(e.note||'')).toLowerCase(); if(!h.includes(searchQuery.toLowerCase())) return false; }
     return true;
   }).sort(byNew);
