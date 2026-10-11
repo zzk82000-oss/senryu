@@ -284,6 +284,7 @@ let viewMode = 'write', quickQueued = false, filterStatus = 'all', filterTag = n
 let editingId = null, composerStatus = 'wip', composerFromQuick = false;
 let filterNoun = null;
 const NO_TAG = '__none__';
+let filterSelUnset = false;
 let composerSel = null;
 
 const TAG_COLORS = {
@@ -425,8 +426,14 @@ function renderFilters(){
   const se = document.getElementById('statusFilters'); se.innerHTML='';
   [['all','全て'],['draft','投稿前'],['posted','投稿済み']].forEach(([k,l])=>{
     const p=document.createElement('span'); p.className='pill'+(filterStatus===k?' active':''); p.textContent=l;
-    p.onclick=()=>{filterStatus=k;render();}; se.appendChild(p);
+    p.onclick=()=>{filterStatus=k; if(k!=='posted') filterSelUnset=false; render();}; se.appendChild(p);
   });
+  // 投稿済みを選んでいるときだけ、「選あり/選なし」が未入力の句の絞り込みを出す
+  if(filterStatus==='posted'){
+    const up=document.createElement('span'); up.className='pill'; up.textContent='選考未入力';
+    if(filterSelUnset){ up.style.background='var(--ink-soft)'; up.style.borderColor='var(--ink-soft)'; up.style.color='#fff'; }
+    up.onclick=()=>{filterSelUnset=!filterSelUnset; render();}; se.appendChild(up);
+  }
   const te = document.getElementById('tagFilters'); te.innerHTML='';
   allTags().forEach(tag=>{
     const p=document.createElement('span'); const on=filterTag===tag; p.className='pill'; p.textContent=tag;
@@ -489,6 +496,7 @@ function render(){
     if(e.status==='wip' && !filterNoun) return false;
     if(filterNoun){ const r=nounIndex && nounIndex.get(filterNoun); if(!r || !r.ids.has(e.id)) return false; }
     if(filterStatus!=='all' && e.status!==filterStatus) return false;
+    if(filterSelUnset && filterStatus==='posted' && (e.selection==='yes' || e.selection==='no')) return false;
     if(filterTag===NO_TAG){ if((e.tags||[]).length) return false; }
     else if(filterTag && !(e.tags||[]).includes(filterTag)) return false;
     if(searchQuery){ const h=(e.poem+' '+(e.note||'')).toLowerCase(); if(!h.includes(searchQuery.toLowerCase())) return false; }
@@ -772,7 +780,7 @@ function renderDaily(){
   updateViewVisibility();
 }
 function showNounSentences(word){
-  filterNoun = word; filterStatus = 'all'; filterTag = null; searchQuery = '';
+  filterNoun = word; filterStatus = 'all'; filterSelUnset = false; filterTag = null; searchQuery = '';
   document.getElementById('searchInput').value = '';
   viewMode = 'stock'; render(); window.scrollTo(0,0);
 }
