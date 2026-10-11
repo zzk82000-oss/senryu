@@ -99,8 +99,12 @@
   .statcard{background:var(--paper);border:.5px solid var(--paper-edge);border-radius:10px;padding:16px 22px;min-width:100px;text-align:center;}
   .statvalue{font-family:'Shippori Mincho',serif;font-size:24px;font-weight:700;}
   .statlabel{font-size:12px;color:var(--ink-soft);margin-top:4px;}
-  .stat-section{margin-top:30px;}
-  .stat-section h3{font-family:'Shippori Mincho',serif;font-size:16px;margin:0 0 4px;font-weight:700;}
+  .stat-section{margin-top:22px;border-top:.5px solid var(--line);padding-top:14px;}
+  .stat-section>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;font-family:'Shippori Mincho',serif;font-size:16px;font-weight:700;}
+  .stat-section>summary::-webkit-details-marker{display:none;}
+  .stat-section>summary::before{content:'▸';font-size:12px;color:var(--ink-soft);width:12px;}
+  .stat-section[open]>summary::before{content:'▾';}
+  .stat-section[open]>summary{margin-bottom:6px;}
   .stat-note{font-size:12px;color:var(--ink-soft);margin:0 0 12px;}
   .barlist{display:flex;flex-direction:column;gap:8px;margin-top:10px;}
   .barrow{display:flex;align-items:center;gap:10px;font-size:13px;}
@@ -787,16 +791,22 @@ function renderStats(){
   let h='<div class="stat-cards">'+statCard(total+'句','総数')+statCard(cnt('wip')+'句','推敲中')+statCard(cnt('draft')+'句','投稿前')+statCard(cnt('posted')+'句','投稿済み')+statCard(avg+'字','平均文字数')+'</div>';
   const selTargets=entries.filter(e=>e.status==='posted' && e.selection==='yes'), wins=selTargets.filter(isWin).length;
   const winRate=selTargets.length ? Math.round(wins/selTargets.length*100) : 0;
-  h+='<div class="stat-section"><h3>入選率</h3><p class="stat-note">投稿済みで「選あり」の句のうち、選考結果が入っている句の割合です(気軽に眺める目安です)</p><div class="stat-cards" style="margin-top:0">'+statCard(winRate+'%','入選率')+statCard(wins+'句','入選した句')+statCard(selTargets.length+'句','投稿済み・選あり')+'</div></div>';
-  h+='<div class="stat-section"><h3>月別の作句数</h3><div class="barlist">';
+  h+='<details class="stat-section"><summary>入選率</summary><p class="stat-note">投稿済みで「選あり」の句のうち、選考結果が入っている句の割合です(気軽に眺める目安です)</p><div class="stat-cards" style="margin-top:0">'+statCard(winRate+'%','入選率')+statCard(wins+'句','入選した句')+statCard(selTargets.length+'句','投稿済み・選あり')+'</div></details>';
+  h+='<details class="stat-section"><summary>月別の作句数</summary><div class="barlist">';
   months.forEach(m=>{ const c=mc[m], p=m.split('-'); h+='<div class="barrow"><span class="barlabel">'+p[0]+'年'+parseInt(p[1],10)+'月</span><div class="bartrack"><div class="barfill" style="width:'+Math.round(c/maxM*100)+'%;background:var(--indigo)"></div></div><span class="barcount">'+c+'句</span></div>'; });
-  h+='</div></div><div class="stat-section"><h3>区分の内訳</h3><div class="barlist">';
+  h+='</div></details><details class="stat-section"><summary>区分の内訳</summary><div class="barlist">';
   tl.forEach(([t,c])=>{ const col=tagColor(t); h+='<div class="barrow"><span class="barlabel">'+escapeHtml(t)+'</span><div class="bartrack"><div class="barfill" style="width:'+Math.round(c/maxT*100)+'%;background:'+col.fg+'"></div></div><span class="barcount">'+c+'句('+Math.round(c/total*100)+'%)</span></div>'; });
-  h+='</div></div><div class="stat-section"><h3>よく出てくるカタカナ語・外来語 TOP'+wl.length+'</h3><p class="stat-note">句の中のカタカナの連続とアルファベットのまとまりを数えたもので、厳密な形態素解析ではありません</p><div class="wordgrid">';
+  h+='</div></details><details class="stat-section"><summary>よく出てくるカタカナ語・外来語 TOP'+wl.length+'</summary><p class="stat-note">句の中のカタカナの連続とアルファベットのまとまりを数えたもので、厳密な形態素解析ではありません</p><div class="wordgrid">';
   wl.forEach(([w,c],i)=>{ h+='<div class="wordchip"><span class="wordrank">'+(i+1)+'</span><span class="wordtext">'+escapeHtml(w)+'</span><span class="wordcount">'+c+'</span></div>'; });
-  h+='</div></div><div class="stat-section"><h3>期間</h3><p class="stat-note">最初の句：'+fmtDate(dates[0])+' ／ 最新の句：'+fmtDate(dates[dates.length-1])+'</p></div>';
+  h+='</div></details><details class="stat-section"><summary>期間</summary><p class="stat-note">最初の句：'+fmtDate(dates[0])+' ／ 最新の句：'+fmtDate(dates[dates.length-1])+'</p></details>';
   area.innerHTML=h;
+  area.querySelectorAll('details').forEach((d,i)=>{ if(statsOpen.has(i)) d.open=true; });
 }
+const statsOpen=new Set();
+document.getElementById('statsArea').addEventListener('toggle',ev=>{
+  const all=Array.from(document.querySelectorAll('#statsArea details')), i=all.indexOf(ev.target);
+  if(i<0) return; if(ev.target.open) statsOpen.add(i); else statsOpen.delete(i);
+},true);
 
 /* ---------- 設定(この端末だけに保存) ---------- */
 const PALETTES = {
@@ -859,7 +869,7 @@ function renderSettings(){
 applySettings();
 
 /* ---------- イベント ---------- */
-document.querySelectorAll('#viewToggle .pill').forEach(p=>{ p.onclick=()=>{ filterNoun=null; flash(''); viewMode=p.dataset.view; render(); }; });
+document.querySelectorAll('#viewToggle .pill').forEach(p=>{ p.onclick=()=>{ filterNoun=null; flash(''); statsOpen.clear(); viewMode=p.dataset.view; render(); }; });
 document.getElementById('dailyBtn').onclick=()=>{ if(daily.word) showNounSentences(daily.word); };
 document.getElementById('nounBarClear').onclick=()=>{ filterNoun=null; render(); };
 document.getElementById('searchInput').oninput=e=>{ searchQuery=e.target.value.trim(); render(); };
