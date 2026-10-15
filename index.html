@@ -76,7 +76,9 @@
   .composer-actions{display:flex;justify-content:space-between;align-items:center;margin-top:18px;gap:10px;flex-wrap:wrap;}
   .composer-actions .left{display:flex;gap:10px;}
   .err{color:var(--hanko);font-size:12px;margin-top:6px;display:none;}
-  .count{font-size:12px;color:var(--ink-soft);margin:14px 2px 0;}
+  .count{font-size:12px;color:var(--ink-soft);margin:0;}
+  .countrow{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:14px 2px 0;}
+  .sortbtn{font-size:12px;padding:4px 12px;}
   .sechead{font-family:'Shippori Mincho',serif;font-size:15px;font-weight:700;margin:22px 2px 0;}
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px;margin-top:12px;}
   .card{position:relative;background:var(--paper);border:.5px solid var(--paper-edge);border-left:4px solid var(--line);border-radius:10px;padding:16px 16px 14px;cursor:pointer;}
@@ -238,7 +240,7 @@
     </div>
   </div>
 
-  <p class="count" id="countLabel"></p>
+  <div class="countrow" id="countRow"><p class="count" id="countLabel"></p><span class="pill sortbtn" id="sortBtn"></span></div>
   <div id="gridArea"><div class="loading">読み込み中…</div></div>
   <div id="statsArea" style="display:none;"></div>
   <div id="settingsArea" style="display:none;"></div>
@@ -280,7 +282,7 @@ const CHUNK_MAX = 60;
 let col = null, userId = null, unsub = null, ready = false, loaded = false, fatal = false;
 let chunks = {};
 let entries = [];
-let viewMode = 'write', quickQueued = false, filterStatus = 'all', filterTag = null, searchQuery = '';
+let viewMode = 'write', quickQueued = false, filterStatus = 'all', filterTag = null, searchQuery = '', sortOldFirst = false;
 let editingId = null, composerStatus = 'wip', composerFromQuick = false;
 let filterNoun = null;
 const NO_TAG = '__none__';
@@ -416,7 +418,7 @@ function updateViewVisibility(){
   const show = (id,on)=>{ document.getElementById(id).style.display = on ? '' : 'none'; };
   const w = viewMode==='write', st = viewMode==='stock', sx = viewMode==='stats';
   show('quickAdd',w); show('quickMsg',w||st);
-  show('statusFilters',st); show('tagFilters',st); show('searchInput',st); show('openComposerBtn',st); show('countLabel',st);
+  show('statusFilters',st); show('tagFilters',st); show('searchInput',st); show('openComposerBtn',st); show('countRow',st);
   show('gridArea',w||st); show('statsArea',sx);
   show('dailyWord',w && dailyReady()); show('nounBar',st && !!filterNoun); show('settingsArea',viewMode==='settings');
   document.querySelectorAll('#viewToggle .pill').forEach(p=>p.classList.toggle('active', p.dataset.view===viewMode));
@@ -501,8 +503,9 @@ function render(){
     else if(filterTag && !(e.tags||[]).includes(filterTag)) return false;
     if(searchQuery){ const h=(e.poem+' '+(e.note||'')).toLowerCase(); if(!h.includes(searchQuery.toLowerCase())) return false; }
     return true;
-  }).sort(byNew);
+  }).sort(sortOldFirst ? (a,b)=>byNew(b,a) : byNew);
   document.getElementById('countLabel').textContent=list.length+'句';
+  document.getElementById('sortBtn').textContent=sortOldFirst ? '古い順 ↑' : '新しい順 ↓';
   if(!list.length){ area.innerHTML='<div class="empty"><p>該当する句がありません。</p></div>'; return; }
   area.appendChild(gridOf(list));
 }
@@ -887,6 +890,7 @@ document.querySelectorAll('#viewToggle .pill').forEach(p=>{ p.onclick=()=>{ filt
 document.getElementById('dailyBtn').onclick=()=>{ if(daily.word) showNounSentences(daily.word); };
 document.getElementById('nounBarClear').onclick=()=>{ filterNoun=null; render(); };
 document.getElementById('searchInput').oninput=e=>{ searchQuery=e.target.value.trim(); render(); };
+document.getElementById('sortBtn').onclick=()=>{ sortOldFirst=!sortOldFirst; render(); };
 document.getElementById('openComposerBtn').onclick=()=>openComposer(null,{status:'draft'});
 document.getElementById('quickStockBtn').onclick=()=>{
   if(!ready){ flash('読み込み中です。少し待ってからお試しください'); return; }
