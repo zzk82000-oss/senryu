@@ -82,6 +82,10 @@
   .sechead{font-family:'Shippori Mincho',serif;font-size:15px;font-weight:700;margin:22px 2px 0;}
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px;margin-top:12px;}
   .card{position:relative;background:var(--paper);border:.5px solid var(--paper-edge);border-left:4px solid var(--line);border-radius:10px;padding:16px 16px 14px;cursor:pointer;}
+  /* スマホ(タッチ操作)のときだけ、長押しで出る文字選択を止める。PCのマウスでは今までどおり選べる */
+  @media (pointer:coarse){ .card{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;} }
+  .toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:var(--ink);color:var(--bg);font-size:13px;padding:9px 18px;border-radius:20px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:1000;max-width:80vw;text-align:center;}
+  .toast.show{opacity:.92;}
   .poem{font-family:'Shippori Mincho','Hiragino Mincho ProN','Yu Mincho',serif;font-size:calc(19px * var(--poem-scale,1));line-height:1.55;margin:0 0 10px;white-space:pre-wrap;word-break:break-word;padding-right:30px;}
   .taglist{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px;}
   .taglabel{display:inline-flex;font-size:11px;padding:3px 9px;border-radius:12px;}
@@ -242,6 +246,7 @@
 
   <div class="countrow" id="countRow"><p class="count" id="countLabel"></p><span class="pill sortbtn" id="sortBtn"></span></div>
   <div id="gridArea"><div class="loading">読み込み中…</div></div>
+  <div class="toast" id="toast" role="status"></div>
   <div id="statsArea" style="display:none;"></div>
   <div id="settingsArea" style="display:none;"></div>
   <div class="foot">
@@ -447,10 +452,52 @@ function renderFilters(){
   if(nOn){ np.style.background='var(--ink-soft)'; np.style.borderColor='var(--ink-soft)'; np.style.color='#fff'; }
   np.onclick=()=>{filterTag=nOn?null:NO_TAG;render();}; te.appendChild(np);
 }
+/* ---------- 長押しで句をコピー(スマホ) ---------- */
+let toastTimer=null;
+function toast(t){
+  const el=document.getElementById('toast'); el.textContent=t; el.classList.add('show');
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>el.classList.remove('show'),2000);
+}
+// クリップボードへ書き込む。だめなら textarea を使う古い方法で試す。成功したら true
+async function copyText(text){
+  try{ if(navigator.clipboard && navigator.clipboard.writeText){ await navigator.clipboard.writeText(text); return true; } }catch(err){ console.warn(err); }
+  try{
+    const ta=document.createElement('textarea'); ta.value=text; ta.setAttribute('readonly','');
+    ta.style.cssText='position:fixed;left:-9999px;top:0;opacity:0;';
+    document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0,text.length);
+    const ok=document.execCommand('copy'); document.body.removeChild(ta); return ok;
+  }catch(err){ console.warn(err); return false; }
+}
+async function copyPoem(text){
+  const ok=await copyText(text);
+  if(ok){ try{ if(navigator.vibrate) navigator.vibrate(30); }catch(_){} toast('コピーしました'); }
+  else toast('コピーできませんでした');
+}
+function attachLongPress(card,text){
+  let timer=null, sx=0, sy=0, fired=false, touched=false;
+  const clear=()=>{ if(timer){ clearTimeout(timer); timer=null; } };
+  card.addEventListener('pointerdown',ev=>{
+    clear(); fired=false;
+    touched = ev.pointerType==='touch';
+    if(!touched) return;                       // マウス・ペンは対象外
+    if(ev.target.closest('.promote')) return;  // 「完成 → ストックへ」ボタンは対象外
+    sx=ev.clientX; sy=ev.clientY;
+    timer=setTimeout(()=>{ timer=null; fired=true; copyPoem(text); },500);
+  });
+  card.addEventListener('pointermove',ev=>{ if(timer && Math.hypot(ev.clientX-sx,ev.clientY-sy)>10) clear(); });
+  const end=()=>{ clear(); if(fired) setTimeout(()=>{ fired=false; },400); };
+  card.addEventListener('pointerup',end);
+  card.addEventListener('pointercancel',end);
+  // 長押しのあとに指を離したときの「タップ」では、編集画面を開かない
+  card.addEventListener('click',ev=>{ if(fired){ fired=false; ev.stopImmediatePropagation(); ev.preventDefault(); } });
+  // タッチのときだけ、標準の長押しメニューを出さない
+  card.addEventListener('contextmenu',ev=>{ if(touched) ev.preventDefault(); });
+}
 function cardEl(e){
   const card=document.createElement('div'); card.className='card';
   const tags=e.tags||[];
   card.style.borderLeftColor = tags.length ? tagColor(tags[0]).fg : 'var(--line)';
+  attachLongPress(card,e.poem);   // クリックの処理より先に登録する(長押し後のタップを止めるため)
   card.onclick=()=>openComposer(e.id);
   const st=document.createElement('div');
   if(isWin(e)){ st.className='stamp hanamaru'; st.title='入選'; st.innerHTML=HANAMARU_SVG; }
