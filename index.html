@@ -470,7 +470,7 @@ async function copyText(text){
 }
 async function copyPoem(text){
   const ok=await copyText(text);
-  if(ok){ try{ if(navigator.vibrate) navigator.vibrate(30); }catch(_){} toast('コピーしました'); }
+  if(ok) toast('コピーしました');
   else toast('コピーできませんでした');
 }
 function attachLongPress(card,text){
