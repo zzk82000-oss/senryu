@@ -1,6 +1,6 @@
 // 最小のサービスワーカー: 自分のサイトのファイルだけを対象に、ネットがあれば最新を取得し、無いときだけ保存済みを使う
-const CACHE = 'senryu-shell-v3';
-const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
+const CACHE = 'senryu-shell-v4';
+const SHELL = ['./', './index.html', './renso.js', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)));
   self.skipWaiting();
@@ -12,8 +12,8 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== self.location.origin) return;
-  // 名詞解析の辞書とライブラリ(約18MB・中身は変わらない)は、保存済みを優先して通信を省く
-  if (/\/(dict|lib)\//.test(url.pathname)) {
+  // 名詞解析の辞書とライブラリ(約18MB)と、連想の日本語WordNet索引(約2MB)は、中身が変わらないので、保存済みを優先して通信を省く
+  if (/\/(dict|lib|data)\//.test(url.pathname)) {
     e.respondWith(caches.match(e.request).then(hit => hit || fetch(e.request).then(res => {
       if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)); }
       return res;
