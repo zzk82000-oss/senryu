@@ -1,5 +1,5 @@
 // 最小のサービスワーカー: 自分のサイトのファイルだけを対象に、ネットがあれば最新を取得し、無いときだけ保存済みを使う
-const CACHE = 'senryu-shell-v4';
+const CACHE = 'senryu-shell-v5';
 const SHELL = ['./', './index.html', './renso.js', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)));

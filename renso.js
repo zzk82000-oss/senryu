@@ -475,6 +475,7 @@
     '.rs-keptbox{margin-top:16px;}.rs-keptbox h3{font-family:"Shippori Mincho",serif;font-size:14px;margin:0 0 8px;}',
     '.rs-kept{display:flex;flex-wrap:wrap;gap:8px;min-height:36px;align-items:center;}',
     '.rs-hint{font-size:12px;color:var(--ink-soft);}',
+    '.rs-keptact{margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--ink-soft);}',
     '.rs-kchip{font:inherit;font-family:"Shippori Mincho",serif;font-size:14px;padding:6px 12px;border-radius:16px;cursor:pointer;background:var(--paper);border:1px solid currentColor;}',
     '.rs-kchip.syn{color:var(--rs-syn);font-weight:700;}.rs-kchip.cmp{color:var(--rs-cmp);font-weight:700;}.rs-kchip.rel{color:var(--rs-rel);}',
     '.rs-src,.rs-dev{margin-top:18px;border-top:.5px solid var(--line);padding-top:10px;font-size:12px;color:var(--ink-soft);line-height:1.8;}',
@@ -486,6 +487,7 @@
     '.rs-dev input{border:.5px solid var(--paper-edge);border-radius:8px;background:var(--field);color:var(--ink);padding:5px 10px;font-size:13px;font-family:inherit;}'
   ].join('\n');
 
+  var hooks = {};    // index.html から渡される処理(単語メモへの保存など)
   var ui = null;     // 画面の部品と状態
   var shown = false;
   var storage = (function () { try { return root.localStorage; } catch (e) { return null; } })();
@@ -530,7 +532,7 @@
       '<div class="rs-bar"><div class="pillrow" id="rsModes"></div><div class="rs-legend"><span><i class="rs-dot syn"></i>類語</span><span><i class="rs-dot cmp"></i>複合語</span><span><i class="rs-dot rel"></i>関連</span></div></div>' +
       '<div class="rs-stage" id="rsStage" aria-label="言葉が現れる舞台"><div class="rs-layer" id="rsLayer"></div><div class="rs-msg" id="rsMsg"></div></div>' +
       '<div class="rs-status" id="rsStatus" role="status"></div>' +
-      '<div class="rs-keptbox"><h3>残した言葉</h3><div class="rs-kept" id="rsKept"></div></div>' +
+      '<div class="rs-keptbox"><h3>残した言葉</h3><div class="rs-kept" id="rsKept"></div><div class="rs-keptact" id="rsKeptAct"></div></div>' +
       '<details class="rs-src"><summary>出典とライセンス</summary>' +
         '<p>類語・複合語: 日本語ワードネット (2.1版) © 2009-2011 NICT, 2012-2015 Francis Bond and 2016-2026 Francis Bond, Takayuki Kuribayashi linked to <a href="https://bond-lab.github.io/wnja/index.ja.html" target="_blank" rel="noopener">https://bond-lab.github.io/wnja/index.ja.html</a>。ライセンス全文は <a href="data/wnja/LICENSE-wnja.txt" target="_blank" rel="noopener">LICENSE-wnja.txt</a>、説明は <a href="data/wnja/NOTICE.md" target="_blank" rel="noopener">NOTICE.md</a>。配布元は、データの約5%に誤りがあり得ると注記しています。</p>' +
         '<p>関連語: <a href="https://ja.wikipedia.org/" target="_blank" rel="noopener">日本語Wikipedia</a> の記事名・記事内のリンク・検索結果から選んでいます。記事の文章は <a href="https://creativecommons.org/licenses/by-sa/4.0/deed.ja" target="_blank" rel="noopener">CC BY-SA 4.0</a> で提供されています。各記事の履歴(執筆者)は、記事のページで確認できます。</p>' +
@@ -541,7 +543,7 @@
     ui = { wrap: wrap, input: wrap.querySelector('#rsInput'), go: wrap.querySelector('#rsGo'), choice: wrap.querySelector('#rsChoice'),
       saved: wrap.querySelector('#rsSaved'), modes: wrap.querySelector('#rsModes'), stage: wrap.querySelector('#rsStage'),
       layer: wrap.querySelector('#rsLayer'), msg: wrap.querySelector('#rsMsg'), status: wrap.querySelector('#rsStatus'),
-      keptBox: wrap.querySelector('#rsKept'), dev: wrap.querySelector('#rsDev'), devBody: wrap.querySelector('#rsDevBody'),
+      keptBox: wrap.querySelector('#rsKept'), keptAct: wrap.querySelector('#rsKeptAct'), dev: wrap.querySelector('#rsDev'), devBody: wrap.querySelector('#rsDevBody'),
       mode: 'firefly', current: null, runId: 0, abort: null, raf: 0, running: false, kept: new Map(), resizeTimer: 0, lastW: 0, lastH: 0 };
 
     [['firefly', '蛍'], ['fall', '滝']].forEach(function (m) {
@@ -648,14 +650,25 @@
   }
 
   function toggleKeep(o) {
-    if (ui.kept.has(o.t)) ui.kept.delete(o.t); else ui.kept.set(o.t, o.kind);
+    if (ui.kept.has(o.t)) ui.kept.delete(o.t); else ui.kept.set(o.t, { kind: o.kind, from: ui.current ? ui.current.query : '' });
     ui.stage.querySelectorAll('.rs-w[data-t]').forEach(function (e) { e.classList.toggle('kept', ui.kept.has(e.dataset.t)); });
     renderKept();
   }
   function renderKept() {
-    ui.keptBox.innerHTML = '';
+    ui.keptBox.innerHTML = ''; ui.keptAct.innerHTML = '';
     if (!ui.kept.size) { ui.keptBox.appendChild(el('span', 'rs-hint', '気に入った言葉を、タップで残せます。もう一度タップすると外れます。')); return; }
-    ui.kept.forEach(function (kind, t) { var c = el('button', 'rs-kchip ' + kind, t); c.type = 'button'; c.title = 'タップで外す'; c.onclick = function () { toggleKeep({ t: t, kind: kind }); }; ui.keptBox.appendChild(c); });
+    ui.kept.forEach(function (v, t) { var c = el('button', 'rs-kchip ' + v.kind, t); c.type = 'button'; c.title = 'タップで外す'; c.onclick = function () { toggleKeep({ t: t, kind: v.kind }); }; ui.keptBox.appendChild(c); });
+    if (hooks.saveWords) {   // 単語メモへ保存(index.html が用意する)
+      var b = el('button', 'btn', '単語メモに保存'); b.type = 'button';
+      var m = el('span', 'rs-keptmsg', '');
+      b.onclick = function () {
+        var list = []; ui.kept.forEach(function (v, t) { list.push({ word: t, from: v.from }); });
+        var r = hooks.saveWords(list);
+        m.textContent = !r ? '単語メモを読み込み中です。少し待ってから、もう一度お試しください'
+          : r.added + '語を単語メモに登録しました' + (r.skipped ? '(登録済みの' + r.skipped + '語はスキップ)' : '');
+      };
+      ui.keptAct.appendChild(b); ui.keptAct.appendChild(m);
+    }
   }
   function mk(o, vertical, sizes) {
     var e = el('span', 'rs-w ' + o.kind + (vertical ? ' rs-v' : ''), o.t);
@@ -811,10 +824,13 @@
     shown = true; ensureProviders();
     if (ui.current && ui.current.items.length && !ui.running) startPattern();
   }
+  function setHooks(h) { hooks = h || {}; if (ui) renderKept(); }
+  // 単語メモなどから、その言葉で探す(保存済みなら「もう一度眺める」か「再取得」の選択になる)
+  function openWith(q) { if (!ui) return; ui.input.value = q; onSubmit(); }
   function hide() { shown = false; if (ui) { cancelAnimationFrame(ui.raf); ui.running = false; ui.layer.innerHTML = ''; } }
 
   return {
-    version: LOGIC_VERSION, show: show, hide: hide, settingsGroup: settingsGroup,
+    version: LOGIC_VERSION, show: show, hide: hide, settingsGroup: settingsGroup, setHooks: setHooks, openWith: openWith,
     search: search, registerProvider: registerProvider, createCache: createCache,
     providers: { createWordnetProvider: createWordnetProvider, createWikipediaProvider: createWikipediaProvider },
     mergeCandidates: mergeCandidates,

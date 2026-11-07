@@ -131,10 +131,27 @@
   .login p{color:var(--ink-soft);font-size:14px;margin:8px 0 18px;}
   .foot{margin-top:48px;font-size:12px;color:var(--ink-soft);display:flex;gap:18px;flex-wrap:wrap;align-items:center;}
   .foot a{cursor:pointer;text-decoration:underline;}
+  .words-intro{margin-top:18px;}
+  .wadd{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;}
+  .wadd input,.wcard input{border:.5px solid var(--paper-edge);background:var(--field);color:var(--ink);border-radius:20px;padding:9px 16px;font-size:16px;font-family:inherit;min-width:0;}
+  .wadd .wnew{flex:1 1 140px;} .wadd .wnewnote{flex:2 1 200px;}
+  .wadd input:focus,.wcard input:focus{outline:2px solid var(--indigo);outline-offset:1px;}
+  .wtools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:14px;}
+  .wmsg{font-size:12px;color:var(--ink-soft);margin:8px 2px 0;min-height:16px;}
+  .wgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-top:12px;}
+  .wcard{background:var(--paper);border:.5px solid var(--paper-edge);border-left:4px solid var(--indigo);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:6px;}
+  .wcard input{width:100%;border-radius:6px;padding:8px 10px;font-size:15px;}
+  .wword{font-family:'Shippori Mincho','Hiragino Mincho ProN','Yu Mincho',serif;font-size:22px;font-weight:700;line-height:1.35;word-break:break-word;}
+  .wnote{font-size:13px;color:var(--ink-soft);white-space:pre-wrap;word-break:break-word;}
+  .wmeta{font-size:11px;color:var(--ink-soft);display:flex;gap:10px;flex-wrap:wrap;}
+  .wfrom{color:var(--indigo-ink);}
+  .wactions{display:flex;gap:6px;margin-top:2px;flex-wrap:wrap;}
+  .wbtn{border:.5px solid var(--paper-edge);background:var(--field);color:var(--ink-soft);border-radius:14px;font-size:12px;padding:4px 12px;cursor:pointer;font-family:inherit;}
+  .wbtn.danger{color:var(--hanko);}
   @media (max-width:560px){
     body{padding:20px 14px 80px;}
     h1{font-size:24px;}
-    .grid{grid-template-columns:1fr;}
+    .grid,.wgrid{grid-template-columns:1fr;}
     .searchbox{flex:1;}
     .barlabel{width:78px;}
   }
@@ -157,6 +174,7 @@
       <div class="pillrow" id="viewToggle">
         <span class="pill active" data-view="write">書く</span>
         <span class="pill" data-view="stock">ストック</span>
+        <span class="pill" data-view="words">単語</span>
         <span class="pill" data-view="stats">傾向</span>
         <span class="pill" data-view="renso">連想</span>
         <span class="pill" data-view="settings">設定</span>
@@ -174,7 +192,7 @@
 
   <div class="quickadd" id="quickAdd">
     <textarea id="quickInput" rows="1" placeholder="句を打つ／貼り付け → Enterで「推敲中」に追加(複数行は1行1句)"></textarea>
-    <div class="quickbtns"><button class="btn primary" id="quickBtn">推敲中に追加</button><button class="btn" id="quickStockBtn">ストックに登録</button></div>
+    <div class="quickbtns"><button class="btn primary" id="quickBtn">推敲中に追加</button><button class="btn" id="quickStockBtn">ストックに登録</button><button class="btn" id="quickWordBtn">単語を登録</button></div>
   </div>
   <div class="quickmsg" id="quickMsg"></div>
 
@@ -251,6 +269,7 @@
   <div id="statsArea" style="display:none;"></div>
   <div id="settingsArea" style="display:none;"></div>
   <div id="rensoArea" style="display:none;"></div>
+  <div id="wordsArea" style="display:none;"></div>
   <div class="foot">
     <a id="exportLink">バックアップを保存</a>
     <a id="importLink">バックアップを読み込む</a>
@@ -346,6 +365,145 @@ function persist(cids){
 }
 function flash(t){ document.getElementById('quickMsg').textContent = t; }
 
+/* ---------- 単語メモ (Firestore: users/{uid}/words/{cid}) ----------
+   句(chunks)とは別の場所。1ドキュメント = { items: [単語, ...] }、1つあたり最大200語。
+   項目: id, word, note(任意), from(任意・連想で探した元の言葉), date(YYYY-MM-DD), ts
+   句と同じく、サーバーで確定する前(wready が false)は、追加・編集を許さない(既存の単語を上書きして失わないため)。 */
+const WORD_CHUNK_MAX = 200;
+let wcol = null, unsubW = null, wready = false, wloaded = false, wfatal = false;
+let wchunks = {}, words = [];
+let wSortOldFirst = false, wSearch = '', wEditingId = null, wordsBuilt = false;
+function rebuildWords(){
+  words = [];
+  Object.keys(wchunks).sort().forEach(k=>{ wchunks[k].forEach(w=>words.push(w)); });
+}
+function wFindChunk(id){
+  for(const k of Object.keys(wchunks)){ if(wchunks[k].some(w=>w.id===id)) return k; }
+  return null;
+}
+function wTargetChunk(){
+  const keys = Object.keys(wchunks).sort();
+  const last = keys[keys.length-1];
+  if(!last) return 'w001';
+  if(wchunks[last].length < WORD_CHUNK_MAX) return last;
+  return 'w'+String(parseInt(last.slice(1),10)+1).padStart(3,'0');
+}
+function persistWords(cids){
+  [...new Set(cids)].forEach(cid=>{
+    const items = wchunks[cid] || [];
+    setDoc(doc(wcol, cid), {items}).catch(err=>{ console.error(err); wordsMsg('保存に失敗しました。通信状況を確認してください'); flash('単語メモの保存に失敗しました。通信状況を確認してください'); });
+  });
+}
+function wordsMsg(t){ const m=document.getElementById('wordsMsg'); if(m) m.textContent=t||''; }
+// 単語を足す。登録済みの語(同じ文字)はスキップ。読み込み前は null を返す(何も変えない)
+function addWords(list){
+  if(!wready || !wcol) return null;
+  const existing = new Set(words.map(w=>w.word));
+  const touched = []; let added = 0, skipped = 0; const date = todayLocal(), ts = Date.now();
+  list.forEach((x,i)=>{
+    const word = String((x && x.word) || '').trim();
+    if(!word) return;
+    if(existing.has(word)){ skipped++; return; }
+    existing.add(word);
+    const cid = wTargetChunk();
+    if(!wchunks[cid]) wchunks[cid] = [];
+    const item = {id:uid(), word, date, ts:ts+i};
+    if(x.note && String(x.note).trim()) item.note = String(x.note).trim();
+    if(x.from && String(x.from).trim()) item.from = String(x.from).trim();
+    wchunks[cid].push(item); touched.push(cid); added++;
+  });
+  rebuildWords();
+  if(touched.length) persistWords(touched);
+  if(viewMode==='words') render();
+  return {added, skipped};
+}
+function quickWordAdd(){
+  const input = document.getElementById('quickInput');
+  const lines = input.value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+  if(!lines.length){ flash('単語を打ってから「単語を登録」を押してください(複数行は1行1語)'); return; }
+  const r = addWords(lines.map(word=>({word})));
+  if(!r){ flash(wfatal ? '単語メモを読み込めませんでした。開き直してください' : '単語メモを読み込み中です。少し待ってからお試しください'); return; }
+  input.value = '';
+  flash(r.added+'語を単語メモに登録しました'+(r.skipped?'(登録済みの'+r.skipped+'語はスキップ)':''));
+  input.focus();
+}
+function buildWordsSkeleton(){
+  const area = document.getElementById('wordsArea');
+  area.innerHTML =
+    '<p class="stat-note words-intro">単語のメモです。句にする前の、言葉のストックとして使います。「書く」画面の「単語を登録」や、「連想」の「単語メモに保存」からも増やせます。</p>'+
+    '<div class="wadd"><input type="text" id="wordNew" class="wnew" placeholder="単語" maxlength="60" aria-label="単語"><input type="text" id="wordNewNote" class="wnewnote" placeholder="ひと言メモ(任意)" maxlength="200" aria-label="ひと言メモ"><button class="btn primary" id="wordAddBtn" type="button">登録</button></div>'+
+    '<div class="wtools"><input type="text" id="wordSearch" class="searchbox" placeholder="単語・メモを検索" aria-label="単語を検索"><span class="spacer"></span><span class="count" id="wordCount"></span><span class="pill sortbtn" id="wordSort"></span></div>'+
+    '<div class="wmsg" id="wordsMsg" role="status"></div><div id="wordsList"></div>';
+  const wn = document.getElementById('wordNew'), wnn = document.getElementById('wordNewNote');
+  function addFromForm(){
+    const w = wn.value.trim(); if(!w) return;
+    const r = addWords([{word:w, note:wnn.value}]);
+    if(!r){ wordsMsg(wfatal ? '単語メモを読み込めませんでした。開き直してください' : '読み込み中です。少し待ってからお試しください'); return; }
+    if(r.added){ wn.value=''; wnn.value=''; wordsMsg('「'+w+'」を登録しました'); wn.focus(); } else wordsMsg('「'+w+'」は登録済みです');
+  }
+  document.getElementById('wordAddBtn').onclick = addFromForm;
+  [wn,wnn].forEach(i=>i.addEventListener('keydown',e=>{ if(e.key==='Enter' && !e.isComposing){ e.preventDefault(); addFromForm(); } }));
+  document.getElementById('wordSearch').oninput = e=>{ wSearch = e.target.value.trim(); renderWordsList(); };
+  document.getElementById('wordSort').onclick = ()=>{ wSortOldFirst = !wSortOldFirst; renderWordsList(); };
+  wordsBuilt = true;
+}
+function renderWords(){ if(!wordsBuilt) buildWordsSkeleton(); renderWordsList(); }
+function renderWordsList(){
+  const list = document.getElementById('wordsList'), count = document.getElementById('wordCount');
+  document.getElementById('wordSort').textContent = wSortOldFirst ? '古い順 ↑' : '新しい順 ↓';
+  list.innerHTML = '';
+  if(wfatal){ count.textContent=''; list.innerHTML='<div class="empty"><p>単語メモを読み込めませんでした。</p><p>通信状況を確認して、開き直してください。</p></div>'; return; }
+  if(!wloaded){ count.textContent=''; list.innerHTML='<div class="loading">読み込み中…</div>'; return; }
+  const q = wSearch.toLowerCase();
+  const arr = words.filter(w=>!q || (w.word+' '+(w.note||'')+' '+(w.from||'')).toLowerCase().includes(q));
+  arr.sort((a,b)=>(b.ts||0)-(a.ts||0) || (b.date||'').localeCompare(a.date||''));
+  if(wSortOldFirst) arr.reverse();
+  count.textContent = arr.length+'語';
+  if(!arr.length){ list.innerHTML = '<div class="empty"><p>'+(words.length?'該当する単語がありません。':'まだ単語がありません。')+'</p></div>'; return; }
+  const g = document.createElement('div'); g.className = 'wgrid';
+  arr.forEach(w=>g.appendChild(wordCardEl(w)));
+  list.appendChild(g);
+}
+function wordCardEl(w){
+  const card = document.createElement('div'); card.className = 'wcard';
+  const btn = (label,cls,fn)=>{ const b=document.createElement('button'); b.type='button'; b.className='wbtn'+(cls?' '+cls:''); b.textContent=label; b.onclick=fn; return b; };
+  if(wEditingId===w.id){
+    const iw=document.createElement('input'); iw.type='text'; iw.value=w.word; iw.maxLength=60; iw.setAttribute('aria-label','単語');
+    const inn=document.createElement('input'); inn.type='text'; inn.value=w.note||''; inn.maxLength=200; inn.placeholder='ひと言メモ(任意)'; inn.setAttribute('aria-label','ひと言メモ');
+    const acts=document.createElement('div'); acts.className='wactions';
+    acts.appendChild(btn('保存','',()=>{
+      const nw=iw.value.trim();
+      if(!nw){ wordsMsg('単語を入力してください'); return; }
+      if(!wready){ wordsMsg('読み込み中です。少し待ってからお試しください'); return; }
+      if(words.some(x=>x.id!==w.id && x.word===nw)){ wordsMsg('「'+nw+'」は登録済みです'); return; }
+      const cid=wFindChunk(w.id); if(!cid) return;
+      const item=wchunks[cid].find(x=>x.id===w.id); item.word=nw;
+      const nn=inn.value.trim(); if(nn) item.note=nn; else delete item.note;
+      wEditingId=null; rebuildWords(); persistWords([cid]); wordsMsg(''); render();
+    }));
+    acts.appendChild(btn('やめる','',()=>{ wEditingId=null; wordsMsg(''); render(); }));
+    card.appendChild(iw); card.appendChild(inn); card.appendChild(acts);
+    return card;
+  }
+  const dw=document.createElement('div'); dw.className='wword'; dw.textContent=w.word; card.appendChild(dw);
+  if(w.note){ const n=document.createElement('div'); n.className='wnote'; n.textContent=w.note; card.appendChild(n); }
+  const meta=document.createElement('div'); meta.className='wmeta';
+  if(w.from){ const f=document.createElement('span'); f.className='wfrom'; f.textContent='連想: '+w.from; meta.appendChild(f); }
+  const d=document.createElement('span'); d.textContent=fmtDate(w.date); meta.appendChild(d);
+  card.appendChild(meta);
+  const acts=document.createElement('div'); acts.className='wactions';
+  acts.appendChild(btn('連想で探す','',()=>{ viewMode='renso'; render(); if(window.Renso && window.Renso.openWith) window.Renso.openWith(w.word); window.scrollTo(0,0); }));
+  acts.appendChild(btn('編集','',()=>{ wEditingId=w.id; wordsMsg(''); render(); }));
+  acts.appendChild(btn('削除','danger',()=>{
+    if(!wready){ wordsMsg('読み込み中です。少し待ってからお試しください'); return; }
+    if(!confirm('「'+w.word+'」を単語メモから消しますか?')) return;
+    const cid=wFindChunk(w.id); if(!cid) return;
+    wchunks[cid]=wchunks[cid].filter(x=>x.id!==w.id); rebuildWords(); persistWords([cid]); wordsMsg('「'+w.word+'」を消しました'); render();
+  }));
+  card.appendChild(acts);
+  return card;
+}
+
 function startSync(user){
   userId = user.uid;
   col = collection(db, 'users', userId, 'chunks');
@@ -365,10 +523,27 @@ function startSync(user){
     scheduleNouns();
     if(ready && quickQueued){ quickQueued = false; quickAdd(); }
   }, err=>{ console.error(err); setFatal(); });
+  // 単語メモ(句とは別の場所)。読み込みに失敗しても、句には影響させない
+  wcol = collection(db, 'users', userId, 'words');
+  unsubW = onSnapshot(wcol, snap=>{
+    const next = {};
+    snap.docs.forEach(d=>{
+      const items = (d.data() && d.data().items) || [];
+      next[d.id] = items.map(x=>Object.assign({},x));
+    });
+    wchunks = next;
+    rebuildWords();
+    wloaded = true;
+    if(!snap.metadata.fromCache || snap.size>0) wready = true;
+    if(viewMode==='words') render();
+  }, err=>{ console.error(err); wfatal = true; if(viewMode==='words') render(); });
 }
 function stopSync(){
   if(unsub){ unsub(); unsub = null; }
   col = null; userId = null; chunks = {}; entries = []; ready = false; loaded = false; fatal = false;
+  if(unsubW){ unsubW(); unsubW = null; }
+  wcol = null; wchunks = {}; words = []; wready = false; wloaded = false; wfatal = false; wEditingId = null; wordsBuilt = false; wSearch = '';
+  document.getElementById('wordsArea').innerHTML = '';
   resetNouns();
   document.getElementById('gridArea').innerHTML = '<div class="loading">読み込み中…</div>';
 }
@@ -379,7 +554,7 @@ function setFatal(){
 
 /* ---------- バックアップ ---------- */
 function exportBackup(){
-  const blob = new Blob([JSON.stringify({version:1, entries}, null, 1)], {type:'application/json'});
+  const blob = new Blob([JSON.stringify({version:2, entries, words}, null, 1)], {type:'application/json'});
   const a = document.createElement('a');
   const d = new Date();
   const stamp = d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0');
@@ -407,7 +582,26 @@ async function importBackup(file){
       touched.push(cid); added++;
     });
     rebuild(); render(); if(touched.length) persist(touched);
-    alert(added+'句を読み込みました');
+    // 単語メモ(version 2 のバックアップに入っている)。古い形式のファイルには無いので、そのまま読み込める
+    let wadded = 0, wnote = '';
+    const warr = Array.isArray(obj) ? [] : (Array.isArray(obj.words) ? obj.words : []);
+    if(warr.length){
+      if(!wready) wnote = '\n(単語メモを読み込み中のため、単語は読み込めませんでした。少し待って、もう一度読み込んでください)';
+      else {
+        const wids = new Set(words.map(w=>w.id)), wtexts = new Set(words.map(w=>w.word)), wtouched = [];
+        warr.forEach(x=>{
+          if(!x || !x.word || !x.id || wids.has(x.id) || wtexts.has(x.word)) return;
+          wids.add(x.id); wtexts.add(x.word);
+          const cid = wTargetChunk(); if(!wchunks[cid]) wchunks[cid] = [];
+          const item = {id:x.id, word:String(x.word), date:x.date||'', ts:x.ts||0};
+          if(x.note) item.note = String(x.note);
+          if(x.from) item.from = String(x.from);
+          wchunks[cid].push(item); wtouched.push(cid); wadded++;
+        });
+        rebuildWords(); if(wtouched.length) persistWords(wtouched); if(viewMode==='words') render();
+      }
+    }
+    alert(added+'句'+(wadded?'と'+wadded+'語':'')+'を読み込みました'+wnote);
   }catch(err){ alert('ファイルを読み込めませんでした'); }
 }
 
@@ -429,7 +623,7 @@ function updateViewVisibility(){
   show('statusFilters',st); show('tagFilters',st); show('searchInput',st); show('openComposerBtn',st); show('countRow',st);
   show('gridArea',w||st); show('statsArea',sx);
   show('dailyWord',w && dailyReady()); show('nounBar',st && !!filterNoun); show('settingsArea',viewMode==='settings');
-  show('rensoArea',viewMode==='renso');
+  show('rensoArea',viewMode==='renso'); show('wordsArea',viewMode==='words');
   if(viewMode!=='renso' && window.Renso) window.Renso.hide();
   document.querySelectorAll('#viewToggle .pill').forEach(p=>p.classList.toggle('active', p.dataset.view===viewMode));
 }
@@ -532,6 +726,7 @@ function gridOf(list){
 function render(){
   updateViewVisibility();
   if(viewMode==='settings'){ renderSettings(); return; }
+  if(viewMode==='words'){ renderWords(); return; }   // 単語メモ。句の読み込みを待たずに使える
   if(viewMode==='renso'){   // 連想ことば(renso.js)。句のデータの読み込みを待たずに使える
     const ra=document.getElementById('rensoArea');
     if(window.Renso) window.Renso.show(ra); else if(!ra.firstChild) ra.textContent='連想ことばを読み込めませんでした。ページを開き直してください。';
@@ -942,6 +1137,7 @@ function renderSettings(){
   if(window.Renso) area.appendChild(window.Renso.settingsGroup());   // 連想ことばの保存(件数・削除)
 }
 applySettings();
+if(window.Renso && window.Renso.setHooks) window.Renso.setHooks({ saveWords: list=>addWords(list) });   // 連想の「単語メモに保存」
 
 /* ---------- イベント ---------- */
 document.querySelectorAll('#viewToggle .pill').forEach(p=>{ p.onclick=()=>{ filterNoun=null; flash(''); statsOpen.clear(); viewMode=p.dataset.view; render(); }; });
@@ -956,6 +1152,7 @@ document.getElementById('quickStockBtn').onclick=()=>{
   composerFromQuick=true;
   openComposer(null,{poem:v,status:'draft'});
 };
+document.getElementById('quickWordBtn').onclick=quickWordAdd;
 document.getElementById('cancelBtn').onclick=closeComposer;
 document.getElementById('saveBtn').onclick=saveEntry;
 document.getElementById('deleteBtn').onclick=deleteEntry;
