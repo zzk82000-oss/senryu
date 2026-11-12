@@ -400,8 +400,9 @@
   }
 
   /* ---------- 端末への保存(localStorage) ---------- */
-  function createCache(storage) {
-    var IDX = 'senryu-renso-idx', PRE = 'senryu-renso-c:';
+  function createCache(storage, opt) {
+    opt = opt || {};
+    var IDX = opt.idx || 'senryu-renso-idx', PRE = opt.pre || 'senryu-renso-c:', MAXE = opt.maxEntries || CACHE_MAX_ENTRIES, MAXC = opt.maxChars || CACHE_MAX_CHARS;
     function readIdx() { try { return JSON.parse(storage.getItem(IDX) || '[]') || []; } catch (e) { return []; } }
     function writeIdx(a) { try { storage.setItem(IDX, JSON.stringify(a)); } catch (e) { /* 保存できなくても動く */ } }
     function keyOf(q) { return searchKey(q) + '|v' + LOGIC_VERSION; }
@@ -423,7 +424,7 @@
           // 古いものから消して、件数と容量を保つ
           idx.sort(function (a, b) { return a.at - b.at; });
           var sum = idx.reduce(function (t, e) { return t + e.n; }, 0);
-          while (idx.length > 1 && (idx.length > CACHE_MAX_ENTRIES || sum > CACHE_MAX_CHARS)) { var old = idx.shift(); sum -= old.n; try { storage.removeItem(PRE + old.k); } catch (e) { /* 無視 */ } }
+          while (idx.length > 1 && (idx.length > MAXE || sum > MAXC)) { var old = idx.shift(); sum -= old.n; try { storage.removeItem(PRE + old.k); } catch (e) { /* 無視 */ } }
           writeIdx(idx);
           return true;
         } catch (e) { return false; }
@@ -487,11 +488,103 @@
     '.rs-dev input{border:.5px solid var(--paper-edge);border-radius:8px;background:var(--field);color:var(--ink);padding:5px 10px;font-size:13px;font-family:inherit;}'
   ].join('\n');
 
+  /* ===== 本棚(布装・リアル・布の折り返し): 写真の質感 + 光と影。左上から光が当たる ===== */
+  var CSS_SHELF = `
+  .rs-wrap,.rs-ov{--rs-syn:var(--indigo-ink);--rs-cmp:#3D7A4A;--rs-rel:var(--hanko);}
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .rs-ov{--rs-cmp:#8CCB9B;--rs-rel:#E0877B;}}
+  :root[data-theme="dark"] .rs-ov{--rs-cmp:#8CCB9B;--rs-rel:#E0877B;}
+  .rs-case{position:relative;margin-top:10px;padding:12px 9px 6px;border-radius:7px;background-color:#3A2A1C;
+    background-image:radial-gradient(130% 80% at 15% 0%,rgba(255,236,200,.24),rgba(255,236,200,0) 60%),linear-gradient(0deg,rgba(0,0,0,.4),rgba(0,0,0,0) 35%),url(data/tex/wood.jpg);
+    background-size:100% 100%,100% 100%,420px 420px;
+    box-shadow:inset 0 0 0 1px rgba(255,230,190,.14),inset 0 2px 3px rgba(255,235,200,.22),inset 0 -3px 9px rgba(0,0,0,.55),0 8px 20px rgba(0,0,0,.35);}
+  .rs-case[hidden]{display:none;}
+  .rs-case::after{content:"";position:absolute;inset:0;border-radius:7px;pointer-events:none;
+    background:radial-gradient(110% 70% at 18% 0%,rgba(255,240,215,.16),rgba(255,240,215,0) 55%),linear-gradient(90deg,rgba(0,0,0,.12),rgba(0,0,0,0) 30%,rgba(0,0,0,.22));}
+  .rs-shelf{position:relative;border-radius:2px 2px 0 0;background-color:#2B1E13;
+    background-image:linear-gradient(90deg,rgba(0,0,0,.55),rgba(0,0,0,0) 7%,rgba(0,0,0,0) 93%,rgba(0,0,0,.5)),linear-gradient(180deg,rgba(0,0,0,.6),rgba(0,0,0,.08) 28%,rgba(0,0,0,0) 60%),linear-gradient(rgba(0,0,0,.2),rgba(0,0,0,.2)),url(data/tex/wood.jpg);
+    background-size:100% 100%,100% 100%,100% 100%,520px 520px;
+    box-shadow:inset 0 9px 14px rgba(0,0,0,.6),inset 9px 0 12px -5px rgba(0,0,0,.55),inset -9px 0 12px -5px rgba(0,0,0,.55);}
+  .rs-shelf::after{content:"";position:absolute;left:0;right:0;bottom:0;height:16px;pointer-events:none;background:linear-gradient(0deg,rgba(0,0,0,.65),rgba(0,0,0,0));}
+  .rs-books{position:relative;z-index:1;display:flex;align-items:flex-end;gap:1px;padding:12px 8px 0;min-height:150px;}
+  .rs-plank{height:15px;margin-bottom:6px;border-radius:0 0 2px 2px;background-color:#5A4028;
+    background-image:linear-gradient(180deg,rgba(255,236,200,.5),rgba(255,236,200,.1) 30%,rgba(0,0,0,0) 55%,rgba(0,0,0,.45)),url(data/tex/wood.jpg);background-size:100% 100%,460px 460px;background-position:0 0,40px 120px;
+    box-shadow:0 5px 9px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,240,215,.4);}
+  .rs-sp{position:relative;flex:none;width:var(--w);height:var(--h);padding:0;border:0;cursor:pointer;color:transparent;z-index:1;
+    font-family:'Zen Old Mincho','Shippori Mincho','Hiragino Mincho ProN','Yu Mincho',serif;font-size:var(--fs);font-weight:700;letter-spacing:.08em;line-height:1;
+    writing-mode:vertical-rl;text-orientation:mixed;display:flex;flex-direction:row;align-items:center;justify-content:center;
+    border-radius:4px 4px 0 0 / 6px 6px 0 0;rotate:var(--rot,0deg);filter:brightness(var(--br,1)) saturate(var(--sat,1));
+    box-shadow:-3px 0 5px -2px rgba(0,0,0,.6),3px 0 5px -2px rgba(0,0,0,.5);transition:transform .18s ease;transform-origin:50% 100%;
+    --c2:color-mix(in srgb,var(--c) 62%,#000);background-color:var(--c);
+    background-image:linear-gradient(90deg,rgba(0,0,0,.5) 0,rgba(0,0,0,0) 6%,rgba(0,0,0,0) 94%,rgba(0,0,0,.45) 100%),
+      linear-gradient(90deg,rgba(255,255,255,0) 8%,rgba(255,255,255,.16) 28%,rgba(255,255,255,.03) 48%,rgba(0,0,0,.14) 78%,rgba(0,0,0,.26) 93%),
+      linear-gradient(180deg,rgba(0,0,0,.34) 0,rgba(0,0,0,0) 8%,rgba(0,0,0,0) 90%,rgba(0,0,0,.4) 100%),url(data/tex/cloth.jpg);
+    background-size:100% 100%,100% 100%,100% 100%,120px 120px;background-position:0 0,0 0,0 0,var(--tx,0) var(--ty,0);background-repeat:no-repeat,no-repeat,no-repeat,repeat;background-blend-mode:normal,normal,normal,multiply;}
+  .rs-sp.syn{--c:#3A5389;} .rs-sp.cmp{--c:#42694F;} .rs-sp.rel{--c:#94433A;}
+  .rs-sp:hover,.rs-sp:focus-visible{transform:translateY(-8px);z-index:3;}
+  .rs-sp:focus-visible{outline:2px solid #E2C16A;outline-offset:1px;}
+  .rs-sp.kept{outline:2px solid #E2C16A;outline-offset:-3px;}
+  .rs-sp.gone{visibility:hidden;}
+  .rs-sp.enter{animation:rsslide .45s ease both;}
+  @keyframes rsslide{from{opacity:0;transform:translateY(-14px);}to{opacity:1;}}
+  .rs-sp::before,.rs-sp::after{content:"";position:absolute;left:0;right:0;height:7px;pointer-events:none;background-color:var(--c);
+    background-image:linear-gradient(180deg,rgba(0,0,0,.55) 0,rgba(255,255,255,.24) 30%,rgba(0,0,0,.12) 62%,rgba(0,0,0,.5) 100%),url(data/tex/cloth.jpg);
+    background-size:100% 100%,120px 120px;background-position:0 0,var(--tx,0) var(--ty,0);background-blend-mode:normal,multiply;}
+  .rs-sp::before{top:0;border-radius:3px 3px 0 0 / 4px 4px 0 0;box-shadow:0 1px 1.5px rgba(0,0,0,.55),inset 0 -1px 0 rgba(255,255,255,.14);}
+  .rs-sp::after{bottom:0;border-radius:0 0 2px 2px;background-image:linear-gradient(0deg,rgba(0,0,0,.55) 0,rgba(255,255,255,.2) 30%,rgba(0,0,0,.12) 62%,rgba(0,0,0,.5) 100%),url(data/tex/cloth.jpg);
+    box-shadow:0 -1px 1.5px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.12);}
+  .rs-ex{position:absolute;inset:14px 0;pointer-events:none;background-repeat:no-repeat;
+    background:linear-gradient(90deg,#8C6B2A,#F0D488 35%,#B58B3A 65%,#E4C16E) 0 0/100% 1.5px no-repeat,linear-gradient(rgba(0,0,0,.4),rgba(0,0,0,.4)) 0 1.5px/100% 1px no-repeat,
+      linear-gradient(90deg,#8C6B2A,#F0D488 35%,#B58B3A 65%,#E4C16E) 0 5px/100% 1.5px no-repeat,linear-gradient(rgba(0,0,0,.4),rgba(0,0,0,.4)) 0 6.5px/100% 1px no-repeat,
+      linear-gradient(90deg,#8C6B2A,#F0D488 35%,#B58B3A 65%,#E4C16E) 0 calc(100% - 6.5px)/100% 1.5px no-repeat,linear-gradient(rgba(0,0,0,.4),rgba(0,0,0,.4)) 0 calc(100% - 5px)/100% 1px no-repeat,
+      linear-gradient(90deg,#8C6B2A,#F0D488 35%,#B58B3A 65%,#E4C16E) 0 calc(100% - 1.5px)/100% 1.5px no-repeat;}
+  .rs-lbl{position:relative;z-index:2;white-space:nowrap;color:transparent;
+    background-image:linear-gradient(100deg,#7F5F24 0%,#EBCB7A 20%,#B88E3B 42%,#F7E4A4 58%,#9A7232 78%,#D9B461 100%);-webkit-background-clip:text;background-clip:text;
+    filter:drop-shadow(0 .7px 0 rgba(0,0,0,.6)) drop-shadow(0 0 .6px rgba(255,236,170,.45));}
+
+  /* 開いた本 */
+  .rs-ov{position:fixed;inset:0;z-index:900;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;
+    padding:max(16px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) max(16px,env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));}
+  .rs-ov[hidden]{display:none;}
+  .rs-ovbg{position:absolute;inset:0;background:rgba(20,16,10,.58);}
+  .rs-book{position:relative;width:min(100%,560px);height:min(62vh,400px);min-height:300px;display:grid;grid-template-columns:1fr 1.55fr;border-radius:3px;
+    border:5px solid var(--bc,#3A5389);box-shadow:0 16px 44px rgba(0,0,0,.5),inset 0 0 0 1px rgba(0,0,0,.35);transform-origin:0 0;overflow:hidden;color:var(--ink);
+    background-color:var(--paper);background-image:linear-gradient(color-mix(in srgb,var(--paper) 62%,transparent),color-mix(in srgb,var(--paper) 62%,transparent)),url(data/tex/paper.jpg);
+    background-size:100% 100%,400px 234px;background-blend-mode:normal,multiply;}
+  .rs-book::before{content:"";position:absolute;left:calc(100% * 1 / 2.55);top:0;bottom:0;width:26px;margin-left:-13px;pointer-events:none;
+    background:linear-gradient(90deg,rgba(0,0,0,0),rgba(0,0,0,.16) 48%,rgba(0,0,0,.2) 52%,rgba(0,0,0,0));}
+  .rs-pg{position:relative;padding:20px 16px;min-width:0;opacity:0;}
+  .rs-pg.on{opacity:1;transition:opacity .35s ease .22s;}
+  .rs-pgL{display:flex;flex-direction:column;align-items:center;gap:12px;border-right:.5px solid var(--paper-edge);}
+  .rs-kind{font-size:11px;letter-spacing:.12em;color:#fff;padding:2px 8px;border-radius:2px;background:var(--rs-syn);}
+  .rs-kind.cmp{background:var(--rs-cmp);} .rs-kind.rel{background:var(--rs-rel);}
+  .rs-title{writing-mode:vertical-rl;font-family:'Zen Old Mincho','Shippori Mincho','Hiragino Mincho ProN','Yu Mincho',serif;font-size:40px;font-weight:700;letter-spacing:.12em;line-height:1.2;margin:auto 0;max-height:100%;overflow:hidden;}
+  .rs-from{font-size:11px;color:var(--ink-soft);}
+  .rs-pgR{display:flex;flex-direction:column;}
+  .rs-ptitle{font-size:12px;font-weight:400;color:var(--ink-soft);margin:0 0 6px;letter-spacing:.08em;}
+  .rs-pwords{list-style:none;margin:0;padding:0;flex:1;display:flex;flex-direction:column;}
+  .rs-pwords li{flex:1;min-height:36px;border-bottom:1px solid var(--paper-edge);display:flex;align-items:flex-end;}
+  .rs-pw{font:inherit;font-family:'Zen Old Mincho','Shippori Mincho','Hiragino Mincho ProN','Yu Mincho',serif;font-size:20px;font-weight:700;color:var(--rs-syn);background:none;border:0;padding:4px 2px 5px;cursor:pointer;text-align:left;animation:rsrise .45s ease both;animation-delay:calc(var(--i) * 110ms + 260ms);}
+  .rs-pw.cmp{color:var(--rs-cmp);} .rs-pw.rel{color:var(--rs-rel);}
+  .rs-pw.kept{text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:5px;}
+  .rs-pw:focus-visible,.rs-ov .btn:focus-visible{outline:2px solid var(--indigo);outline-offset:2px;}
+  @keyframes rsrise{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}
+  .rs-pnote{font-size:12px;color:var(--ink-soft);line-height:1.8;margin:auto 0;}
+  .rs-pnote.busy::after{content:"…";display:inline-block;animation:rsb 1.4s ease-in-out infinite;}
+  .rs-ribbon{position:absolute;top:0;right:22px;width:14px;height:0;background:var(--rs-rel);transition:height .3s ease;clip-path:polygon(0 0,100% 0,100% 100%,50% 82%,0 100%);}
+  .rs-ribbon.on{height:54px;}
+  .rs-ovact{position:relative;display:flex;gap:8px;flex-wrap:wrap;justify-content:center;}
+  .rs-ovnote{position:relative;font-size:11px;color:#E9E2D2;text-align:center;max-width:520px;min-height:16px;}
+  @media (prefers-reduced-motion:reduce){.rs-sp.enter,.rs-pw{animation:none;}.rs-pg.on{transition:none;}.rs-sp{transition:none;}.rs-pnote.busy::after{animation:none;}}
+  `;
+
+
   var hooks = {};    // index.html から渡される処理(単語メモへの保存など)
   var ui = null;     // 画面の部品と状態
   var shown = false;
   var storage = (function () { try { return root.localStorage; } catch (e) { return null; } })();
-  var cache = createCache(storage || { getItem: function () { return null; }, setItem: function () { throw new Error('no storage'); }, removeItem: function () { } });
+  var storageLike = storage || { getItem: function () { return null; }, setItem: function () { throw new Error('no storage'); }, removeItem: function () { } };
+  var cache = createCache(storageLike);                                  // 検索の結果
+  var bcache = createCache(storageLike, { idx: 'senryu-renso-b-idx', pre: 'senryu-renso-b:', maxEntries: 200, maxChars: 600000 });   // 本棚で「もっと広げた」言葉
   var reduce = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   function browserHttp(url, o) {
@@ -522,33 +615,35 @@
   function fmtTime(ms) { var d = new Date(ms), p = function (n) { return (n < 10 ? '0' : '') + n; }; return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + d.getHours() + ':' + p(d.getMinutes()); }
 
   function buildUI(container) {
-    var st = document.createElement('style'); st.textContent = CSS; document.head.appendChild(st);
+    var st = document.createElement('style'); st.textContent = CSS + CSS_SHELF; document.head.appendChild(st);
     var wrap = el('div', 'rs-wrap');
     wrap.innerHTML =
-      '<p class="rs-lead">言葉を入れて「探す」を押すと、類語・複合語・関連する言葉が、蛍や滝になって現れます。そこから先の連想は、ご自身で。</p>' +
+      '<p class="rs-lead">言葉を入れて「探す」を押すと、類語・複合語・関連する言葉が、蛍・滝・本棚になって現れます。そこから先の連想は、ご自身で。</p>' +
       '<form class="rs-form" autocomplete="off"><input type="text" id="rsInput" maxlength="30" placeholder="言葉を入れる(例: 雨)" enterkeyhint="search" aria-label="探す言葉"><button class="btn primary" type="submit" id="rsGo">探す</button></form>' +
       '<div class="rs-choice" id="rsChoice" hidden></div>' +
       '<div class="rs-saved" id="rsSaved"></div>' +
       '<div class="rs-bar"><div class="pillrow" id="rsModes"></div><div class="rs-legend"><span><i class="rs-dot syn"></i>類語</span><span><i class="rs-dot cmp"></i>複合語</span><span><i class="rs-dot rel"></i>関連</span></div></div>' +
       '<div class="rs-stage" id="rsStage" aria-label="言葉が現れる舞台"><div class="rs-layer" id="rsLayer"></div><div class="rs-msg" id="rsMsg"></div></div>' +
+      '<div class="rs-case" id="rsCase" hidden aria-label="本棚"></div>' +
       '<div class="rs-status" id="rsStatus" role="status"></div>' +
       '<div class="rs-keptbox"><h3>残した言葉</h3><div class="rs-kept" id="rsKept"></div><div class="rs-keptact" id="rsKeptAct"></div></div>' +
       '<details class="rs-src"><summary>出典とライセンス</summary>' +
         '<p>類語・複合語: 日本語ワードネット (2.1版) © 2009-2011 NICT, 2012-2015 Francis Bond and 2016-2026 Francis Bond, Takayuki Kuribayashi linked to <a href="https://bond-lab.github.io/wnja/index.ja.html" target="_blank" rel="noopener">https://bond-lab.github.io/wnja/index.ja.html</a>。ライセンス全文は <a href="data/wnja/LICENSE-wnja.txt" target="_blank" rel="noopener">LICENSE-wnja.txt</a>、説明は <a href="data/wnja/NOTICE.md" target="_blank" rel="noopener">NOTICE.md</a>。配布元は、データの約5%に誤りがあり得ると注記しています。</p>' +
         '<p>関連語: <a href="https://ja.wikipedia.org/" target="_blank" rel="noopener">日本語Wikipedia</a> の記事名・記事内のリンク・検索結果から選んでいます。記事の文章は <a href="https://creativecommons.org/licenses/by-sa/4.0/deed.ja" target="_blank" rel="noopener">CC BY-SA 4.0</a> で提供されています。各記事の履歴(執筆者)は、記事のページで確認できます。</p>' +
+        '<p>本棚の質感の写真: <a href="https://ambientcg.com/" target="_blank" rel="noopener">ambientCG</a>(CC0・著作権の制限なし)の Fabric040、Paper001、Wood027 を、小さく加工して使っています。詳しくは <a href="data/tex/NOTICE.md" target="_blank" rel="noopener">NOTICE.md</a>。</p>' +
       '</details>' +
       '<details class="rs-dev" id="rsDev"><summary>開発用: 取得内容を確認する</summary><div id="rsDevBody"></div></details>';
     container.appendChild(wrap);
 
     ui = { wrap: wrap, input: wrap.querySelector('#rsInput'), go: wrap.querySelector('#rsGo'), choice: wrap.querySelector('#rsChoice'),
       saved: wrap.querySelector('#rsSaved'), modes: wrap.querySelector('#rsModes'), stage: wrap.querySelector('#rsStage'),
-      layer: wrap.querySelector('#rsLayer'), msg: wrap.querySelector('#rsMsg'), status: wrap.querySelector('#rsStatus'),
+      case: wrap.querySelector('#rsCase'), layer: wrap.querySelector('#rsLayer'), msg: wrap.querySelector('#rsMsg'), status: wrap.querySelector('#rsStatus'),
       keptBox: wrap.querySelector('#rsKept'), keptAct: wrap.querySelector('#rsKeptAct'), dev: wrap.querySelector('#rsDev'), devBody: wrap.querySelector('#rsDevBody'),
-      mode: 'firefly', current: null, runId: 0, abort: null, raf: 0, running: false, kept: new Map(), resizeTimer: 0, lastW: 0, lastH: 0 };
+      mode: 'firefly', current: null, runId: 0, abort: null, raf: 0, running: false, kept: new Map(), resizeTimer: 0, lastW: 0, lastH: 0, lastCaseW: 0, caseTimer: 0, bookRun: 0, bookAbort: null, ov: null, ovState: null, animateNext: false, escBound: false };
 
-    [['firefly', '蛍'], ['fall', '滝']].forEach(function (m) {
+    [['firefly', '蛍'], ['fall', '滝'], ['shelf', '本棚']].forEach(function (m) {
       var b = el('span', 'pill' + (m[0] === ui.mode ? ' active' : ''), m[1]); b.dataset.k = m[0];
-      b.onclick = function () { ui.mode = m[0]; ui.modes.querySelectorAll('.pill').forEach(function (x) { x.classList.toggle('active', x.dataset.k === ui.mode); }); startPattern(); };
+      b.onclick = function () { ui.mode = m[0]; ui.animateNext = m[0] === 'shelf'; ui.modes.querySelectorAll('.pill').forEach(function (x) { x.classList.toggle('active', x.dataset.k === ui.mode); }); startPattern(); };
       ui.modes.appendChild(b);
     });
     wrap.querySelector('.rs-form').addEventListener('submit', function (e) { e.preventDefault(); onSubmit(); });
@@ -562,6 +657,15 @@
           if (w > 0 && (Math.abs(w - ui.lastW) > 2 || Math.abs(h - ui.lastH) > 2)) startPattern();
         }, 200);
       }).observe(ui.stage);
+    }
+    if (window.ResizeObserver) {   // 本棚は、幅が変わったら、組み直す(本を開いている間は、しない)
+      new ResizeObserver(function () {
+        clearTimeout(ui.caseTimer);
+        ui.caseTimer = setTimeout(function () {
+          if (!shown || ui.mode !== 'shelf' || !ui.current || ui.case.hidden || ui.ovState) return;
+          var w = ui.case.clientWidth; if (w > 0 && Math.abs(w - ui.lastCaseW) > 2) startPattern();
+        }, 200);
+      }).observe(ui.case);
     }
     renderKept(); renderSaved(); setMsg('言葉を入れて「探す」を押してください');
   }
@@ -646,13 +750,13 @@
     if (res.items.length < 10) nodes.push(el('div', '', '候補が少ない言葉でした。無理に増やさず、取得できた分だけ出しています。'));
     setStatus(nodes); setMsg('');
     if (ui.dev.open) renderDev();
-    startPattern();
+    ui.animateNext = true; startPattern();
   }
 
   function toggleKeep(o) {
     if (ui.kept.has(o.t)) ui.kept.delete(o.t); else ui.kept.set(o.t, { kind: o.kind, from: ui.current ? ui.current.query : '' });
-    ui.stage.querySelectorAll('.rs-w[data-t]').forEach(function (e) { e.classList.toggle('kept', ui.kept.has(e.dataset.t)); });
-    renderKept();
+    document.querySelectorAll('.rs-w[data-t],.rs-sp[data-t],.rs-pw[data-t]').forEach(function (e) { e.classList.toggle('kept', ui.kept.has(e.dataset.t)); });
+    updateRibbon(); renderKept();
   }
   function renderKept() {
     ui.keptBox.innerHTML = ''; ui.keptAct.innerHTML = '';
@@ -753,10 +857,13 @@
     } };
   }
 
-  function stopPattern() { cancelAnimationFrame(ui.raf); ui.running = false; ui.layer.innerHTML = ''; }
+  function stopPattern() { cancelAnimationFrame(ui.raf); ui.running = false; ui.layer.innerHTML = ''; ui.case.innerHTML = ''; closeBook(true); ui.case.hidden = true; ui.stage.style.display = ''; }
   function startPattern() {
-    cancelAnimationFrame(ui.raf); ui.layer.innerHTML = ''; ui.running = false;
-    if (!ui.current || !ui.current.items.length || !shown) return;
+    cancelAnimationFrame(ui.raf); ui.layer.innerHTML = ''; ui.case.innerHTML = ''; ui.running = false;
+    var has = !!(ui.current && ui.current.items.length && shown), shelf = has && ui.mode === 'shelf';
+    ui.case.hidden = !shelf; ui.stage.style.display = shelf ? 'none' : '';
+    if (!has) return;
+    if (shelf) { if (ui.case.clientWidth < 50) return; ui.lastCaseW = ui.case.clientWidth; renderShelf(ui.animateNext); ui.animateNext = false; ui.running = true; return; }
     var S = { w: ui.stage.clientWidth, h: ui.stage.clientHeight };
     if (S.w < 50 || S.h < 50) return;
     ui.lastW = S.w; ui.lastH = S.h;
@@ -770,6 +877,179 @@
       var dt = Math.min(.05, (now - last) / 1000); last = now; p.frame((now - t0) / 1000, dt);
       ui.raf = requestAnimationFrame(loop);
     })(last);
+  }
+
+  /* 表現3: 本棚。言葉が背表紙になって並び、本を選ぶと見開きが開いて、関連語が現れる。
+     開いた本の1ページ目は、日本語WordNet(通信なし)。「もっと広げる」を押したときだけ、その言葉でWikipediaに聞く(結果は端末に保存) */
+  function hashStr(s) { var h = 7; for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return h; }
+  function seededRnd(seed) { var x = seed >>> 0; return function () { x = (x * 1664525 + 1013904223) >>> 0; return x / 4294967296; }; }
+  var KIND_LABEL = { syn: '類語', cmp: '複合語', rel: '関連' };
+
+  function renderShelf(animate) {
+    var words = wordsOfCurrent(), W = ui.case.clientWidth - 18 - 16, rows = [], row = null, used = 0, items = [];
+    ui.case.innerHTML = '';
+    words.forEach(function (b) {
+      var fs = [13, 15, 17][b.w - 1], w = Math.round(fs * 1.95), len = Array.from(b.t).length, rr = seededRnd(hashStr(b.t + 'r'));
+      var h = Math.max([110, 120, 130][b.w - 1], Math.ceil(len * fs * 1.05) + 36) + Math.round((hashStr(b.t) % 7) - 3);
+      w += Math.round((rr() - 0.5) * 5); h += Math.round((rr() - 0.5) * 10);
+      items.push({ b: b, w: w, h: h, fs: fs, lean: 0, m: 0, th: 0,
+        jit: { tx: Math.floor(rr() * 300) + 'px', ty: Math.floor(rr() * 300) + 'px', br: (0.84 + rr() * 0.2).toFixed(2), sat: (0.74 + rr() * 0.22).toFixed(2), rot: ((rr() - 0.5) * 0.9).toFixed(2) + 'deg' } });
+    });
+    // 寄りかかる本: 隣の背の高い本に頭をもたせかける。傾き(th)から足元の隙間(m = 高さ × sin(th))を計算し、
+    // 頂点が、隣の本の面にちょうど触れる(食い込まない)ようにする。傾いた本どうしは隣り合わせない
+    items.forEach(function (it, i) {
+      if (items[i - 1] && items[i - 1].lean === 1) return;
+      var r = seededRnd(hashStr(it.b.t + 'L')); if (r() > 0.16) return;
+      var th = (4.5 + r() * 3.5) * Math.PI / 180;
+      var tall = function (o) { return o && !o.lean && o.h >= it.h * Math.cos(th) + 6; };
+      if (tall(items[i + 1])) it.lean = 1; else if (tall(items[i - 1])) it.lean = -1; else return;
+      it.th = th; it.m = Math.ceil(it.h * Math.sin(th)) + 1;
+    });
+    items.forEach(function (it) {
+      var need = it.w + 2 + it.m;
+      if (!row || used + need > W) { row = []; rows.push(row); used = 0; }
+      row.push(it); used += need;
+    });
+    rows.forEach(function (r) { r.forEach(function (it, ix) { if (it.lean && !r[ix + it.lean]) { it.lean = 0; it.m = 0; it.th = 0; } }); });   // 隣が別の段なら、傾けない
+    var n = 0;
+    rows.forEach(function (r) {
+      var shelf = el('div', 'rs-shelf'), books = el('div', 'rs-books');
+      r.forEach(function (x) {
+        var s = el('button', 'rs-sp ' + x.b.kind + (ui.kept.has(x.b.t) ? ' kept' : '') + (animate && !reduce ? ' enter' : '')); s.type = 'button';
+        s.style.setProperty('--w', x.w + 'px'); s.style.setProperty('--h', x.h + 'px'); s.style.setProperty('--fs', x.fs + 'px');
+        s.style.setProperty('--tx', x.jit.tx); s.style.setProperty('--ty', x.jit.ty); s.style.setProperty('--br', x.jit.br); s.style.setProperty('--sat', x.jit.sat);
+        if (x.lean) {
+          s.dataset.lean = x.lean; s.style.setProperty('--rot', (x.lean * x.th * 180 / Math.PI).toFixed(2) + 'deg'); s.style.transformOrigin = x.lean > 0 ? '100% 100%' : '0 100%';
+          if (x.lean > 0) s.style.marginRight = x.m + 'px'; else s.style.marginLeft = x.m + 'px';
+        } else s.style.setProperty('--rot', x.jit.rot);
+        if (animate && !reduce) s.style.animationDelay = (n * 18) + 'ms'; n++;
+        s.appendChild(el('i', 'rs-ex')); s.appendChild(el('span', 'rs-lbl', x.b.t)); s.dataset.t = x.b.t;
+        s.setAttribute('aria-label', x.b.t + '(' + KIND_LABEL[x.b.kind] + ')の本を開く');
+        s.addEventListener('click', function () { openBook(x.b, s); });
+        books.appendChild(s);
+      });
+      shelf.appendChild(books); ui.case.appendChild(shelf); ui.case.appendChild(el('div', 'rs-plank'));
+    });
+  }
+
+  function ensureOv() {
+    if (ui.ov) return ui.ov;
+    var root = el('div', 'rs-ov'); root.hidden = true; root.setAttribute('role', 'dialog'); root.setAttribute('aria-modal', 'true'); root.setAttribute('aria-label', '開いた本');
+    root.innerHTML = '<div class="rs-ovbg"></div><div class="rs-book"><div class="rs-pg rs-pgL"></div><div class="rs-pg rs-pgR"><div class="rs-ribbon"></div><h2 class="rs-ptitle"></h2><ul class="rs-pwords"></ul><div class="rs-pnote" role="status"></div></div></div>' +
+      '<div class="rs-ovact"><button type="button" class="btn rs-prev" hidden>ひとつ前のページ</button><button type="button" class="btn primary rs-more">もっと広げる</button><button type="button" class="btn rs-close">閉じる</button></div><div class="rs-ovnote"></div>';
+    document.body.appendChild(root);
+    var q = function (s) { return root.querySelector(s); };
+    var O = ui.ov = { root: root, bg: q('.rs-ovbg'), book: q('.rs-book'), pgL: q('.rs-pgL'), pgR: q('.rs-pgR'), title: q('.rs-ptitle'), words: q('.rs-pwords'), pnote: q('.rs-pnote'),
+      ribbon: q('.rs-ribbon'), prev: q('.rs-prev'), more: q('.rs-more'), close: q('.rs-close'), note: q('.rs-ovnote') };
+    O.close.addEventListener('click', function () { closeBook(); });
+    O.bg.addEventListener('click', function () { closeBook(); });
+    O.more.addEventListener('click', function () { bookMore(); });
+    O.prev.addEventListener('click', function () { var st = ui.ovState; if (!st) return; st.page = 0; turnPage(); });
+    if (!ui.escBound) { ui.escBound = true; document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeBook(); }); }
+    return O;
+  }
+
+  // 1ページ目: 辞書(日本語WordNet)の関連語を、4〜6語。入力語と、この本の言葉そのものは除く
+  function dictWordsOf(o) {
+    var wn = registry.filter(function (p) { return p.id === 'wordnet'; })[0];
+    if (!wn) return Promise.resolve([]);
+    return wn.run(o.t, {}).then(function (res) {
+      var seen = new Set([dedupeKey(o.t), dedupeKey(ui.current ? ui.current.query : '')]), out = [];
+      res.items.slice().sort(function (a, b) { return b.score - a.score; }).forEach(function (it) {
+        var k = dedupeKey(it.text); if (out.length >= 6 || seen.has(k) || isJunkText(it.text)) return;
+        seen.add(k); out.push({ t: it.text, kind: KIND_OF[it.category] });
+      });
+      return out;
+    }).catch(function () { return []; });
+  }
+
+  function openBook(o, spine) {
+    ensureProviders(); var O = ensureOv();
+    dictWordsOf(o).then(function (p1) {
+      if (!O.root.hidden) return;   // すでに開いている
+      var st = ui.ovState = { o: o, spine: spine, page: 0, p1: p1, extra: null, busy: false, err: '' };
+      O.pgL.classList.remove('on'); O.pgR.classList.remove('on');
+      O.root.hidden = false; O.book.style.setProperty('--bc', getComputedStyle(spine).getPropertyValue('--c').trim() || '#3A5389');
+      fillBookPage();
+      var sr = spine.getBoundingClientRect(), br = O.book.getBoundingClientRect();
+      spine.classList.add('gone');
+      if (!reduce && O.book.animate) {
+        O.book.animate([
+          { transform: 'translate(' + (sr.left - br.left) + 'px,' + (sr.top - br.top) + 'px) scale(' + (sr.width / br.width) + ',' + (sr.height / br.height) + ')', backgroundColor: getComputedStyle(spine).getPropertyValue('--c').trim() || '#3A5389', boxShadow: '0 0 0 rgba(0,0,0,0)' },
+          { transform: 'none', boxShadow: '0 16px 44px rgba(0,0,0,.5)' }
+        ], { duration: 520, easing: 'cubic-bezier(.2,.8,.2,1)' });
+      }
+      requestAnimationFrame(function () { O.pgL.classList.add('on'); O.pgR.classList.add('on'); });
+      setTimeout(function () { try { O.close.focus({ preventScroll: true }); } catch (e) { /* 無視 */ } }, 60);
+    });
+  }
+
+  function fillBookPage() {
+    var st = ui.ovState; if (!st) return;
+    var O = ui.ov, o = st.o, list = st.page === 0 ? st.p1 : (st.extra || []);
+    O.pgL.innerHTML = '';
+    O.pgL.appendChild(el('span', 'rs-kind ' + o.kind, KIND_LABEL[o.kind]));
+    O.pgL.appendChild(el('div', 'rs-title', o.t));
+    O.pgL.appendChild(el('div', 'rs-from', '「' + (ui.current ? ui.current.query : '') + '」から'));
+    O.title.textContent = st.page === 0 ? '辞書から' : 'もっと広げた言葉(Wikipedia)';
+    O.words.innerHTML = ''; O.pnote.classList.remove('busy'); O.pnote.textContent = '';
+    list.forEach(function (w, i) {
+      var li = el('li'), b = el('button', 'rs-pw ' + w.kind + (ui.kept.has(w.t) ? ' kept' : ''), w.t); b.type = 'button'; b.style.setProperty('--i', i); b.dataset.t = w.t;
+      b.addEventListener('click', function () { toggleKeep({ t: w.t, kind: w.kind }); });
+      li.appendChild(b); O.words.appendChild(li);
+    });
+    if (st.busy) { O.pnote.classList.add('busy'); O.pnote.textContent = 'Wikipediaから集めています'; }
+    else if (st.err) O.pnote.textContent = st.err;
+    else if (!list.length) O.pnote.textContent = st.page === 0 ? '辞書には、この言葉の関連語がありません。「もっと広げる」で、Wikipediaから探せます。' : 'Wikipediaにも、関連する言葉が見つかりませんでした。';
+    O.more.hidden = !(st.page === 0 || (st.page === 1 && st.err)); O.more.textContent = st.page === 0 ? 'もっと広げる' : 'もう一度試す'; O.more.disabled = st.busy;
+    O.prev.hidden = st.page === 0;
+    O.note.textContent = st.page === 0 ? '「もっと広げる」を押したときだけ、Wikipediaに聞きます。結果は、この端末に保存されます。' : '';
+    updateRibbon();
+  }
+  function updateRibbon() { if (!ui.ov) return; var any = !!ui.ov.words.querySelector('.rs-pw.kept'); ui.ov.ribbon.classList.toggle('on', any); }
+  function turnPage() { var O = ui.ov; O.pgR.classList.remove('on'); setTimeout(function () { fillBookPage(); O.pgR.classList.add('on'); }, reduce ? 0 : 160); }
+
+  // 「もっと広げる」: 保存済みなら通信しない。なければ、その言葉でWikipediaに聞く(直列・5回前後)
+  async function bookMore() {
+    var st = ui.ovState; if (!st || st.busy) return;
+    st.page = 1; st.err = '';
+    if (st.extra) { turnPage(); return; }
+    var q = st.o.t, res = bcache.get(q);
+    if (!res) {
+      var wp = registry.filter(function (p) { return p.id === 'wikipedia'; })[0];
+      st.busy = true; turnPage();
+      if (ui.bookAbort) ui.bookAbort.abort();
+      var ctl = ui.bookAbort = typeof AbortController !== 'undefined' ? new AbortController() : { signal: undefined, abort: function () { } };
+      try { res = await search(q, { providers: [wp], signal: ctl.signal }); }
+      catch (e) { if (e && e.name === 'AbortError') return; res = null; st.err = '取得中に問題が起きました: ' + ((e && e.message) || e); }
+      if (ui.ovState !== st) return;   // 閉じたあとの結果は使わない
+      st.busy = false;
+      if (res && !res.items.length && res.meta.failures.length) { st.err = 'Wikipediaから取得できませんでした(' + res.meta.failures[0].message + ')。'; res = null; }
+      else if (res && res.items.length && !res.partial) bcache.put(res);
+      if (res) {
+        var have = new Set(st.p1.map(function (w) { return dedupeKey(w.t); }).concat([dedupeKey(q), dedupeKey(ui.current ? ui.current.query : '')]));
+        st.extra = res.items.slice().sort(function (a, b) { return b.score - a.score; }).filter(function (it) { return !have.has(dedupeKey(it.text)); }).slice(0, 6)
+          .map(function (it) { return { t: it.text, kind: KIND_OF[it.category] }; });
+      }
+      fillBookPage(); return;
+    }
+    var have2 = new Set(st.p1.map(function (w) { return dedupeKey(w.t); }).concat([dedupeKey(q), dedupeKey(ui.current ? ui.current.query : '')]));
+    st.extra = res.items.slice().sort(function (a, b) { return b.score - a.score; }).filter(function (it) { return !have2.has(dedupeKey(it.text)); }).slice(0, 6)
+      .map(function (it) { return { t: it.text, kind: KIND_OF[it.category] }; });
+    turnPage();
+  }
+
+  function closeBook(instant) {
+    var O = ui.ov, st = ui.ovState; if (!O || !st || O.root.hidden) return;
+    if (ui.bookAbort) { ui.bookAbort.abort(); ui.bookAbort = null; }
+    var s = st.spine; ui.ovState = null;
+    function done() { O.root.hidden = true; if (s) { s.classList.remove('gone'); if (!instant) { try { s.focus({ preventScroll: true }); } catch (e) { /* 無視 */ } } } }
+    if (!instant && !reduce && O.book.animate && s && s.isConnected) {
+      var sr = s.getBoundingClientRect(), br = O.book.getBoundingClientRect();
+      O.pgL.classList.remove('on'); O.pgR.classList.remove('on');
+      var a = O.book.animate([{ transform: 'none', opacity: 1 }, { transform: 'translate(' + (sr.left - br.left) + 'px,' + (sr.top - br.top) + 'px) scale(' + (sr.width / br.width) + ',' + (sr.height / br.height) + ')', opacity: 0 }], { duration: 320, easing: 'ease-in' });
+      a.onfinish = done;
+    } else done();
   }
 
   /* 開発用: 取得内容の確認(明示的に開いたときだけ) */
@@ -811,9 +1091,10 @@
     var g = el('div', 'setgroup'); g.appendChild(el('h3', '', '連想ことば'));
     function draw() {
       g.querySelectorAll('.rs-set').forEach(function (n) { n.remove(); });
-      var s = cache.stats(), n = el('p', 'setnote rs-set', '保存した検索: ' + s.count + '件(約' + Math.max(1, Math.round(s.chars * 2 / 1024)) + 'KB)。この端末だけに保存されます。最大' + CACHE_MAX_ENTRIES + '件で、古いものから自動で消えます。');
+      var s1 = cache.stats(), s2 = bcache.stats(), s = { count: s1.count + s2.count, chars: s1.chars + s2.chars };
+      var n = el('p', 'setnote rs-set', '保存した検索: ' + s1.count + '件、本棚で広げた言葉: ' + s2.count + '件(合わせて約' + Math.max(1, Math.round(s.chars * 2 / 1024)) + 'KB)。この端末だけに保存されます。古いものから自動で消えます。');
       var b = el('button', 'btn danger rs-set', 'すべて削除'); b.type = 'button'; b.disabled = !s.count;
-      b.onclick = function () { cache.clear(); draw(); if (ui) renderSaved(); };
+      b.onclick = function () { cache.clear(); bcache.clear(); draw(); if (ui) renderSaved(); };
       g.appendChild(n); g.appendChild(b);
     }
     draw(); return g;
@@ -827,7 +1108,7 @@
   function setHooks(h) { hooks = h || {}; if (ui) renderKept(); }
   // 単語メモなどから、その言葉で探す(保存済みなら「もう一度眺める」か「再取得」の選択になる)
   function openWith(q) { if (!ui) return; ui.input.value = q; onSubmit(); }
-  function hide() { shown = false; if (ui) { cancelAnimationFrame(ui.raf); ui.running = false; ui.layer.innerHTML = ''; } }
+  function hide() { shown = false; if (ui) { closeBook(true); cancelAnimationFrame(ui.raf); ui.running = false; ui.layer.innerHTML = ''; ui.case.innerHTML = ''; } }
 
   return {
     version: LOGIC_VERSION, show: show, hide: hide, settingsGroup: settingsGroup, setHooks: setHooks, openWith: openWith,
